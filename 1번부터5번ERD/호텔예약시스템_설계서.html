@@ -1,0 +1,1169 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>호텔 예약 시스템 설계서 · DB 설계와 화면 설계</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<style>
+:root{--bg:#EEF1F4;--paper:#FFFFFF;--ink:#1F2937;--muted:#4B5563;--rule:#D1D5DB;--mark:#C2410C;--code:#E5E7EB;color-scheme:light}
+@media (prefers-color-scheme: dark){:root{--bg:#161A1F;--paper:#20262D;--ink:#E5E7EB;--muted:#AEB6C1;--rule:#3A424C;--mark:#F08A57;--code:#2C333C;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Noto Sans KR',system-ui,sans-serif;line-height:1.7}
+a{color:inherit}
+a:focus-visible{outline:2px solid var(--mark);outline-offset:3px}
+.layout{display:flex;flex-wrap:wrap;max-width:1500px;margin:0 auto}
+.side{flex:1 1 260px;max-width:320px;padding:40px 28px}
+.side-in{position:sticky;top:24px}
+.main{flex:999 1 600px;min-width:0;padding:40px 28px 96px}
+.doc-title{font-size:30px;font-weight:900;line-height:1.25;margin:0 0 12px;letter-spacing:-0.5px}
+.meta{font-size:14px;color:var(--muted);margin:0 0 28px}
+.toc{list-style:none;margin:0;padding:0;border-top:2px solid var(--ink)}
+.toc li a{display:block;padding:10px 0;border-bottom:1px solid var(--rule);text-decoration:none;font-size:14px}
+.toc li a b{display:inline-block;width:24px;height:24px;border-radius:12px;background:var(--mark);color:#fff;text-align:center;line-height:24px;font-size:13px;margin-right:8px}
+.toc li a:hover{color:var(--mark)}
+.toc li:first-child a b{background:var(--ink);color:var(--paper)}
+.row-sec,.overview{background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:36px;margin-bottom:36px}
+.row-head{display:flex;align-items:center;gap:16px;margin-bottom:8px}
+.row-num{width:52px;height:52px;border-radius:26px;background:var(--mark);color:#fff;font-size:26px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+h2{font-size:24px;margin:0;line-height:1.3}
+h3{font-size:18px;margin:32px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--ink)}
+h4{font-size:15px;margin:22px 0 8px}
+h4 span{font-weight:400;color:var(--muted);margin-left:6px}
+.lead{max-width:72ch;margin:0 0 16px}
+.erd-box{background:#FFFFFF;border:1px solid var(--rule);border-radius:10px;padding:16px;overflow-x:auto}
+.erd-box pre{margin:0;display:flex;justify-content:center;color:#1F2937;font-size:12px}
+.tscroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:520px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--rule)}
+th{font-size:13px;color:var(--muted);font-weight:500}
+code{background:var(--code);padding:2px 6px;border-radius:4px;font-size:13px}
+.screen{margin:0 0 28px}
+.screen figcaption{font-size:14px;margin-bottom:8px;color:var(--muted)}
+.screen figcaption b{color:var(--ink);margin-right:6px}
+.board-fit{width:100%;overflow:hidden;border:1px solid var(--rule);border-radius:8px;background:#fff}
+.board{width:1600px;height:1080px;transform-origin:0 0}
+.board *{font-family:'Noto Sans KR',system-ui,sans-serif}
+.overview p{max-width:72ch}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px;margin:12px 0 0}
+.flow span{border:1px solid var(--rule);border-radius:16px;padding:4px 12px}
+@media (max-width: 700px){.row-sec,.overview{padding:20px}.side{max-width:none}.side-in{position:static}}
+@media print{body{background:#fff}.side{display:none}.row-sec,.overview{break-before:page;border:none}}
+#scr-recommend a{color:#1F2937}
+#scr-recommend a:hover{color:#000000}
+#scr-recommend .tab{padding:8px 16px;border-radius:18px;font-size:14px;border:1px solid #D1D5DB;color:#374151;background:#FFFFFF}
+#scr-recommend .tab.on{background:#1F2937;color:#FFFFFF;border-color:#1F2937;font-weight:700}
+#scr-main a{color:#1F2937}
+#scr-main a:hover{color:#000000}
+#scr-main .d{height:40px;display:flex;align-items:center;justify-content:center;font-size:14px;border-radius:6px;color:#1F2937}
+#scr-main .booked{color:#4B5563;text-decoration:line-through;background:#F3F4F6}
+#scr-main .holiday{color:#B91C1C;background:#FEF2F2}
+#scr-main .sel{background:#1F2937;color:#FFFFFF;font-weight:700}
+#scr-main .range{background:#E5E7EB}
+#scr-complete a{color:#1F2937}
+#scr-complete a:hover{color:#000000}
+#scr-adminroom a{color:#1F2937}
+#scr-adminroom a:hover{color:#000000}
+#scr-adminroom .row{display:grid;grid-template-columns:56px 72px minmax(0,1.4fr) minmax(0,1fr) 80px minmax(0,1fr) 96px 150px;align-items:center;font-size:13px;border-bottom:1px solid #E5E7EB;min-height:48px}
+#scr-adminroom .row.off{color:#4B5563;background:#F9FAFB}
+#scr-adminroom .badge-on{background:#DCFCE7;color:#166534;font-weight:700;font-size:12px;padding:3px 8px;border-radius:10px}
+#scr-adminroom .badge-off{background:#E5E7EB;color:#374151;font-weight:700;font-size:12px;padding:3px 8px;border-radius:10px}
+#scr-adminroom .sbtn{height:32px;padding:0 10px;border:1px solid #D1D5DB;background:#FFFFFF;border-radius:6px;font-family:inherit;font-size:12px;color:#1F2937}
+#scr-admindate a{color:#1F2937}
+#scr-admindate a:hover{color:#000000}
+#scr-admindate .c{height:74px;border:1px solid #E5E7EB;border-radius:6px;padding:6px 8px;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;font-size:13px;color:#1F2937;background:#FFFFFF}
+#scr-admindate .c.blank{border-color:transparent;background:transparent}
+#scr-admindate .c.has{background:#FFFFFF}
+#scr-admindate .c.closed{background:#FEF2F2;border-color:#FCA5A5}
+#scr-admindate .c.pick{border:2px solid #1F2937}
+#scr-admindate .sub{font-size:11px;color:#374151}
+#scr-admindate .c.closed .sub{color:#B91C1C;font-weight:700}
+#scr-adminreservation a{color:#1F2937}
+#scr-adminreservation a:hover{color:#000000}
+#scr-adminreservation .row{display:grid;grid-template-columns:minmax(0,1fr) 72px minmax(0,1fr) minmax(0,1.5fr) 52px minmax(0,1fr) 84px 130px;align-items:center;font-size:13px;border-bottom:1px solid #E5E7EB;min-height:50px;padding:0 12px;gap:6px}
+#scr-adminreservation .b{font-weight:700;font-size:12px;padding:3px 8px;border-radius:10px;justify-self:start}
+#scr-adminreservation .b.wait{background:#FEF3C7;color:#92400E}
+#scr-adminreservation .b.ok{background:#DCFCE7;color:#166534}
+#scr-adminreservation .b.no{background:#E5E7EB;color:#374151}
+#scr-adminreservation .sbtn{height:32px;padding:0 10px;border:1px solid #D1D5DB;background:#FFFFFF;border-radius:6px;font-family:inherit;font-size:12px;color:#1F2937}
+#scr-adminreservation .sbtn.dark{background:#1F2937;color:#FFFFFF;border-color:#1F2937}
+#scr-adminreservation .tb{padding:8px 14px;border-radius:16px;border:1px solid #D1D5DB;font-size:13px}
+#scr-adminreservation .tb.on{background:#1F2937;color:#FFFFFF;border-color:#1F2937;font-weight:700}
+</style>
+</head>
+<body>
+<div class="layout">
+<aside class="side"><div class="side-in">
+<h1 class="doc-title">호텔 예약 시스템 설계서</h1>
+<p class="meta">DB 설계와 화면 설계 · 작성자 조준엽 · 2026-11-20</p>
+<nav aria-label="목차"><ul class="toc">
+<li><a href="#overview"><b>0</b> 전체 ERD</a></li>
+<li><a href="#row1"><b>1</b> 회원 테이블 · 객실 추천 화면</a></li><li><a href="#row2"><b>2</b> 객실 테이블 · 관리자 객실 관리 화면</a></li><li><a href="#row3"><b>3</b> 예약 일자 테이블 · 관리자 예약 일자 관리 화면</a></li><li><a href="#row4"><b>4</b> 객실 예약 테이블 · 객실 예약 화면</a></li><li><a href="#row5"><b>5</b> 공통 테이블 · 관리자 예약 관리 화면</a></li>
+</ul></nav>
+</div></aside>
+<main class="main">
+<section id="overview" class="overview">
+<header class="row-head"><span class="row-num" style="background:var(--ink);color:var(--paper)">0</span><h2>전체 ERD</h2></header>
+<p>테이블 6개의 관계를 한 장에 모은 그림이에요. 가운데 예약 테이블이 회원과 객실을 잇고, 객실에서 휴무일과 사진이 뻗어 나가요. 메뉴 테이블은 화면 메뉴만 담당해서 다른 표와 연결되지 않아요.</p>
+<div class="erd-box"><pre class="mermaid">erDiagram
+  MEMBER ||--o{ RESERVATION : &quot;예약한다&quot;
+  ROOM ||--o{ RESERVATION : &quot;예약된다&quot;
+  ROOM |o--o{ CLOSED_DATE : &quot;쉬는 날&quot;
+  ROOM ||--o{ ATTACH_FILE : &quot;사진&quot;
+  MEMBER {
+    bigint member_id PK &quot;회원 번호&quot;
+    varchar login_id &quot;로그인 아이디&quot;
+    varchar password &quot;비밀번호 암호화해서 저장&quot;
+    varchar name &quot;이름&quot;
+    varchar phone &quot;전화번호&quot;
+    varchar email &quot;이메일&quot;
+    varchar role &quot;USER 손님 또는 ADMIN 관리자&quot;
+    datetime created_at &quot;가입한 시각&quot;
+  }
+  ROOM {
+    bigint room_id PK &quot;객실 번호&quot;
+    varchar room_name &quot;객실 이름 중복 불가&quot;
+    varchar room_type &quot;객실 종류&quot;
+    int max_guest &quot;최대 인원&quot;
+    int price &quot;1박 요금&quot;
+    varchar description &quot;객실 설명&quot;
+    int view_count &quot;조회수 추천 점수에 사용&quot;
+    char is_active &quot;사용 여부 Y N N = 비활성화&quot;
+    datetime created_at &quot;등록한 시각&quot;
+  }
+  RESERVATION {
+    bigint reservation_id PK &quot;예약 번호&quot;
+    bigint member_id FK &quot;예약한 회원&quot;
+    bigint room_id FK &quot;예약한 객실&quot;
+    date check_in_date &quot;입실 날짜&quot;
+    date check_out_date &quot;퇴실 날짜&quot;
+    int guest_count &quot;인원&quot;
+    int total_price &quot;총 금액&quot;
+    varchar status &quot;PENDING 대기 APPROVED 승인 CANCELED 취소&quot;
+    varchar request_memo &quot;요청 사항 최대 200자&quot;
+    datetime created_at &quot;예약한 시각&quot;
+    datetime updated_at &quot;상태 바뀐 시각&quot;
+  }
+  CLOSED_DATE {
+    bigint closed_date_id PK &quot;휴무 번호&quot;
+    bigint room_id FK &quot;객실 번호 비어 있으면 호텔 전체 휴무&quot;
+    date closed_date &quot;쉬는 날짜&quot;
+    varchar reason &quot;사유&quot;
+    datetime created_at &quot;등록한 시각&quot;
+  }
+  ATTACH_FILE {
+    bigint file_id PK &quot;파일 번호&quot;
+    varchar target_type &quot;어디 파일인지 예 ROOM&quot;
+    bigint target_id &quot;그 대상의 번호&quot;
+    varchar original_name &quot;원래 파일 이름&quot;
+    varchar saved_path &quot;저장된 위치&quot;
+    bigint file_size &quot;파일 크기&quot;
+    datetime created_at &quot;올린 시각&quot;
+  }
+  MENU {
+    bigint menu_id PK &quot;메뉴 번호&quot;
+    bigint parent_id &quot;상위 메뉴 번호&quot;
+    varchar menu_name &quot;메뉴 이름&quot;
+    varchar menu_url &quot;이동할 주소&quot;
+    varchar role &quot;보이는 사람 USER ADMIN&quot;
+    int sort_order &quot;순서&quot;
+    char is_used &quot;사용 여부 Y N&quot;
+  }</pre></div>
+<p style="margin-top:20px">손님 예약이 흘러가는 순서</p>
+<div class="flow"><span>ROOM-001 객실 추천</span><span>RSV-001 객실 예약</span><span>RSV-002 예약 완료</span><span>ADM-003 관리자 승인</span></div>
+</section>
+<section id="row1" class="row-sec">
+<header class="row-head"><span class="row-num">1</span><h2>회원 테이블 · 객실 추천 화면</h2></header>
+<h3>DB 설계</h3>
+<p class="lead">손님 명부예요. role 칸으로 손님(USER)과 관리자(ADMIN)를 나눠서, 관리자 화면은 ADMIN만 들어갈 수 있게 해요. 비밀번호는 알아볼 수 없게 바꿔서 저장해요.</p>
+<div class="erd-box"><pre class="mermaid">erDiagram
+  MEMBER ||--o{ RESERVATION : &quot;예약한다&quot;
+  MEMBER {
+    bigint member_id PK &quot;회원 번호&quot;
+    varchar login_id &quot;로그인 아이디&quot;
+    varchar password &quot;비밀번호 암호화해서 저장&quot;
+    varchar name &quot;이름&quot;
+    varchar phone &quot;전화번호&quot;
+    varchar email &quot;이메일&quot;
+    varchar role &quot;USER 손님 또는 ADMIN 관리자&quot;
+    datetime created_at &quot;가입한 시각&quot;
+  }
+  RESERVATION {
+    bigint reservation_id PK &quot;예약 번호&quot;
+    bigint member_id FK &quot;예약한 회원&quot;
+  }</pre></div>
+<div class="spec"><h4>MEMBER <span>회원 테이블</span></h4>
+<div class="tscroll"><table><thead><tr><th>컬럼</th><th>타입</th><th>키</th><th>설명</th></tr></thead><tbody><tr><td><code>member_id</code></td><td>bigint</td><td>PK</td><td>회원 번호</td></tr><tr><td><code>login_id</code></td><td>varchar</td><td></td><td>로그인 아이디</td></tr><tr><td><code>password</code></td><td>varchar</td><td></td><td>비밀번호 (암호화해서 저장)</td></tr><tr><td><code>name</code></td><td>varchar</td><td></td><td>이름</td></tr><tr><td><code>phone</code></td><td>varchar</td><td></td><td>전화번호</td></tr><tr><td><code>email</code></td><td>varchar</td><td></td><td>이메일</td></tr><tr><td><code>role</code></td><td>varchar</td><td></td><td>USER(손님) 또는 ADMIN(관리자)</td></tr><tr><td><code>created_at</code></td><td>datetime</td><td></td><td>가입한 시각</td></tr></tbody></table></div></div>
+<h3>화면 설계서</h3>
+<figure class="screen"><figcaption><b>ROOM-001</b> 객실 추천 화면</figcaption><div class="board-fit"><div class="board" id="scr-recommend">
+<div style="width: 1600px; height: 1080px; box-sizing: border-box; font-family: 'Noto Sans KR', sans-serif; color: #1F2937; background: #FFFFFF; display: flex; flex-direction: column">
+
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-bottom: 2px solid #1F2937">
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">프로젝트</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">호텔 예약 시스템</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면명</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">객실 추천</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면 ID</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">ROOM-001</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">작성자</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">조준엽</div></div>
+<div style="padding: 16px 24px"><div style="font-size: 12px; color: #4B5563">작성일</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">2026-11-19</div></div>
+</div>
+
+<div style="display: flex; flex-grow: 1">
+
+<div style="width: 1060px; box-sizing: border-box; padding: 32px; background: #F9FAFB">
+<div style="background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 10px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column">
+
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; border-bottom: 1px solid #E5E7EB">
+<div style="font-size: 18px; font-weight: 700; letter-spacing: 2px">HOTEL</div>
+<div style="display: flex; gap: 24px; font-size: 14px; color: #4B5563"><span style="color: #1F2937; font-weight: 700">객실 추천</span><span>내 예약</span><span>로그아웃</span></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 22px; padding: 28px">
+
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">1</span>
+<div style="flex-grow: 1; display: flex; gap: 12px; align-items: flex-end; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px">
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px"><label for="ci" style="font-size: 12px; color: #4B5563">체크인</label><input id="ci" style="height: 44px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px" value="2026-12-24"></div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px"><label for="co" style="font-size: 12px; color: #4B5563">체크아웃</label><input id="co" style="height: 44px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px" value="2026-12-26"></div>
+<div style="width: 140px; display: flex; flex-direction: column; gap: 6px"><label for="gc" style="font-size: 12px; color: #4B5563">인원</label><input id="gc" style="height: 44px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px" value="2명"></div>
+<button style="height: 44px; padding: 0 28px; background: #1F2937; color: #FFFFFF; border: none; border-radius: 6px; font-size: 15px; font-weight: 700; font-family: inherit">검색</button>
+</div>
+</div>
+
+<div style="display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span>
+<span class="tab on">추천순</span><span class="tab">인기순</span><span class="tab">낮은 가격순</span>
+</div>
+<div style="font-size: 14px; color: #4B5563">예약 가능한 객실 [N]개</div>
+</div>
+
+<div style="display: flex; gap: 10px; align-items: flex-start">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span>
+<div style="flex-grow: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+
+<div style="border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column">
+<div style="height: 110px; background: #E5E7EB; display: flex; align-items: flex-start; justify-content: space-between; padding: 10px; box-sizing: border-box">
+<span style="font-size: 12px; color: #4B5563">객실 사진</span>
+<span style="background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 10px">추천</span>
+</div>
+<div style="padding: 12px; display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+<div style="font-size: 15px; font-weight: 700">[객실명]</div>
+<div>1박 [금액]원 · 최대 [N]명</div>
+<div style="color: #4B5563; font-size: 12px">조회 [N] · 예약 [N]</div>
+<button style="margin-top: 8px; height: 44px; background: #FFFFFF; border: 1px solid #1F2937; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 500; color: #1F2937">예약하기</button>
+</div>
+</div>
+
+<div style="border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column">
+<div style="height: 110px; background: #E5E7EB; display: flex; align-items: flex-start; justify-content: space-between; padding: 10px; box-sizing: border-box">
+<span style="font-size: 12px; color: #4B5563">객실 사진</span>
+
+</div>
+<div style="padding: 12px; display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+<div style="font-size: 15px; font-weight: 700">[객실명]</div>
+<div>1박 [금액]원 · 최대 [N]명</div>
+<div style="color: #4B5563; font-size: 12px">조회 [N] · 예약 [N]</div>
+<button style="margin-top: 8px; height: 44px; background: #FFFFFF; border: 1px solid #1F2937; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 500; color: #1F2937">예약하기</button>
+</div>
+</div>
+
+<div style="border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column">
+<div style="height: 110px; background: #E5E7EB; display: flex; align-items: flex-start; justify-content: space-between; padding: 10px; box-sizing: border-box">
+<span style="font-size: 12px; color: #4B5563">객실 사진</span>
+
+</div>
+<div style="padding: 12px; display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+<div style="font-size: 15px; font-weight: 700">[객실명]</div>
+<div>1박 [금액]원 · 최대 [N]명</div>
+<div style="color: #4B5563; font-size: 12px">조회 [N] · 예약 [N]</div>
+<button style="margin-top: 8px; height: 44px; background: #FFFFFF; border: 1px solid #1F2937; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 500; color: #1F2937">예약하기</button>
+</div>
+</div>
+
+<div style="border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column">
+<div style="height: 110px; background: #E5E7EB; display: flex; align-items: flex-start; justify-content: space-between; padding: 10px; box-sizing: border-box">
+<span style="font-size: 12px; color: #4B5563">객실 사진</span>
+
+</div>
+<div style="padding: 12px; display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+<div style="font-size: 15px; font-weight: 700">[객실명]</div>
+<div>1박 [금액]원 · 최대 [N]명</div>
+<div style="color: #4B5563; font-size: 12px">조회 [N] · 예약 [N]</div>
+<button style="margin-top: 8px; height: 44px; background: #FFFFFF; border: 1px solid #1F2937; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 500; color: #1F2937">예약하기</button>
+</div>
+</div>
+
+<div style="border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column">
+<div style="height: 110px; background: #E5E7EB; display: flex; align-items: flex-start; justify-content: space-between; padding: 10px; box-sizing: border-box">
+<span style="font-size: 12px; color: #4B5563">객실 사진</span>
+
+</div>
+<div style="padding: 12px; display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+<div style="font-size: 15px; font-weight: 700">[객실명]</div>
+<div>1박 [금액]원 · 최대 [N]명</div>
+<div style="color: #4B5563; font-size: 12px">조회 [N] · 예약 [N]</div>
+<button style="margin-top: 8px; height: 44px; background: #FFFFFF; border: 1px solid #1F2937; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 500; color: #1F2937">예약하기</button>
+</div>
+</div>
+
+<div style="border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column">
+<div style="height: 110px; background: #E5E7EB; display: flex; align-items: flex-start; justify-content: space-between; padding: 10px; box-sizing: border-box">
+<span style="font-size: 12px; color: #4B5563">객실 사진</span>
+
+</div>
+<div style="padding: 12px; display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+<div style="font-size: 15px; font-weight: 700">[객실명]</div>
+<div>1박 [금액]원 · 최대 [N]명</div>
+<div style="color: #4B5563; font-size: 12px">조회 [N] · 예약 [N]</div>
+<button style="margin-top: 8px; height: 44px; background: #FFFFFF; border: 1px solid #1F2937; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 500; color: #1F2937">예약하기</button>
+</div>
+</div>
+
+</div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 10px; align-self: center">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">4</span>
+<div style="display: flex; gap: 6px; font-size: 14px"><span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #1F2937; color: #FFFFFF">1</span><span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center">2</span><span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center">3</span><span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center">›</span></div>
+</div>
+
+</div>
+</div>
+</div>
+
+<div style="width: 540px; box-sizing: border-box; padding: 32px; border-left: 1px solid #D1D5DB; display: flex; flex-direction: column; gap: 18px">
+<div style="font-size: 18px; font-weight: 700; padding-bottom: 10px; border-bottom: 1px solid #1F2937">설명 (Description)</div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">1</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">검색 조건</div><div style="color: #374151">체크인, 체크아웃, 인원을 넣고 검색하면 그 날짜에 비어 있고 인원이 맞는 객실만 보여준다. 처음 들어오면 날짜 없이 전체 추천 목록을 보여준다.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">정렬</div><div style="color: #374151">추천순(기본) / 인기순(예약 많은 순) / 낮은 가격순.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">추천 객실 목록 (알고리즘)</div><div style="color: #374151">추천 점수 = 조회수 × 0.3 + 최근 30일 예약 수 × 0.7. 점수가 높은 순으로 보여주고 1등에 "추천" 표시. 비활성화된 객실은 빼고 보여준다. 카드를 누르면 조회수 +1, 예약하기를 누르면 객실 예약 화면(RSV-001)으로 이동.</div><div style="color: #4B5563; font-size: 12px; margin-top: 4px">※ 0.3, 0.7은 예시 값. 팀 협의 필요</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">4</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">페이지 번호</div><div style="color: #374151">한 페이지에 6개씩 보여준다.</div></div></div>
+
+<div style="margin-top: auto; background: #F3F4F6; border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.7">
+<div style="font-weight: 700; margin-bottom: 4px">연결 API</div>
+<div style="font-family: monospace">GET /rooms/recommend</div>
+<div style="color: #374151; margin-bottom: 6px">추천 객실 목록 (날짜, 인원, 정렬, 페이지)</div>
+<div style="font-family: monospace">POST /rooms/{roomId}/view</div>
+<div style="color: #374151">조회수 +1</div>
+</div>
+</div>
+
+</div>
+</div>
+</div></div></figure>
+</section><section id="row2" class="row-sec">
+<header class="row-head"><span class="row-num">2</span><h2>객실 테이블 · 관리자 객실 관리 화면</h2></header>
+<h3>DB 설계</h3>
+<p class="lead">방 안내 카드 묶음이에요. view_count(조회수)는 추천 점수에 쓰이고, is_active로 방을 지우지 않고 숨겨요(비활성화). 지우면 예전 예약 기록이 망가지기 때문이에요.</p>
+<div class="erd-box"><pre class="mermaid">erDiagram
+  ROOM ||--o{ RESERVATION : &quot;예약된다&quot;
+  ROOM |o--o{ CLOSED_DATE : &quot;쉬는 날&quot;
+  ROOM ||--o{ ATTACH_FILE : &quot;사진&quot;
+  ROOM {
+    bigint room_id PK &quot;객실 번호&quot;
+    varchar room_name &quot;객실 이름 중복 불가&quot;
+    varchar room_type &quot;객실 종류&quot;
+    int max_guest &quot;최대 인원&quot;
+    int price &quot;1박 요금&quot;
+    varchar description &quot;객실 설명&quot;
+    int view_count &quot;조회수 추천 점수에 사용&quot;
+    char is_active &quot;사용 여부 Y N N = 비활성화&quot;
+    datetime created_at &quot;등록한 시각&quot;
+  }
+  RESERVATION {
+    bigint reservation_id PK &quot;예약 번호&quot;
+    bigint room_id FK &quot;예약한 객실&quot;
+  }
+  CLOSED_DATE {
+    bigint closed_date_id PK &quot;휴무 번호&quot;
+    bigint room_id FK &quot;객실 번호 비어 있으면 호텔 전체 휴무&quot;
+  }
+  ATTACH_FILE {
+    bigint file_id PK &quot;파일 번호&quot;
+    bigint target_id &quot;그 대상의 번호&quot;
+  }</pre></div>
+<div class="spec"><h4>ROOM <span>객실 테이블</span></h4>
+<div class="tscroll"><table><thead><tr><th>컬럼</th><th>타입</th><th>키</th><th>설명</th></tr></thead><tbody><tr><td><code>room_id</code></td><td>bigint</td><td>PK</td><td>객실 번호</td></tr><tr><td><code>room_name</code></td><td>varchar</td><td></td><td>객실 이름 (중복 불가)</td></tr><tr><td><code>room_type</code></td><td>varchar</td><td></td><td>객실 종류</td></tr><tr><td><code>max_guest</code></td><td>int</td><td></td><td>최대 인원</td></tr><tr><td><code>price</code></td><td>int</td><td></td><td>1박 요금</td></tr><tr><td><code>description</code></td><td>varchar</td><td></td><td>객실 설명</td></tr><tr><td><code>view_count</code></td><td>int</td><td></td><td>조회수 (추천 점수에 사용)</td></tr><tr><td><code>is_active</code></td><td>char</td><td></td><td>사용 여부 Y / N (N = 비활성화)</td></tr><tr><td><code>created_at</code></td><td>datetime</td><td></td><td>등록한 시각</td></tr></tbody></table></div></div>
+<h3>화면 설계서</h3>
+<figure class="screen"><figcaption><b>ADM-001</b> 관리자) 객실 관리 화면</figcaption><div class="board-fit"><div class="board" id="scr-adminroom">
+<div style="width: 1600px; height: 1080px; box-sizing: border-box; font-family: 'Noto Sans KR', sans-serif; color: #1F2937; background: #FFFFFF; display: flex; flex-direction: column">
+
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-bottom: 2px solid #1F2937">
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">프로젝트</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">호텔 예약 시스템</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면명</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">관리자) 객실 관리</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면 ID</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">ADM-001</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">작성자</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">조준엽</div></div>
+<div style="padding: 16px 24px"><div style="font-size: 12px; color: #4B5563">작성일</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">2026-11-19</div></div>
+</div>
+
+<div style="display: flex; flex-grow: 1">
+
+<div style="width: 1060px; box-sizing: border-box; padding: 32px; background: #F9FAFB">
+<div style="background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 10px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column">
+
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; border-bottom: 1px solid #E5E7EB">
+<div style="font-size: 18px; font-weight: 700; letter-spacing: 2px">HOTEL <span style="font-size: 13px; font-weight: 500; letter-spacing: 0; color: #4B5563">관리자</span></div>
+<div style="display: flex; gap: 24px; font-size: 14px; color: #4B5563"><span style="color: #1F2937; font-weight: 700">객실 관리</span><span>예약 일자 관리</span><span>예약 관리</span><span>로그아웃</span></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 20px; padding: 24px 28px">
+
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">1</span>
+<input aria-label="객실명 검색" style="width: 260px; height: 44px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px" placeholder="객실명 검색">
+<div style="display: flex; gap: 6px; font-size: 13px"><span style="padding: 8px 14px; border-radius: 16px; background: #1F2937; color: #FFFFFF; font-weight: 700">전체</span><span style="padding: 8px 14px; border-radius: 16px; border: 1px solid #D1D5DB">사용 중</span><span style="padding: 8px 14px; border-radius: 16px; border: 1px solid #D1D5DB">비활성</span></div>
+<button style="margin-left: auto; height: 44px; padding: 0 20px; background: #1F2937; color: #FFFFFF; border: none; border-radius: 6px; font-size: 14px; font-weight: 700; font-family: inherit">+ 객실 추가</button>
+</div>
+
+<div style="display: flex; gap: 10px; align-items: flex-start">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span>
+<div style="flex-grow: 1; border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden">
+<div class="row" style="background: #F3F4F6; font-weight: 700; min-height: 40px; padding: 0 12px"><span>번호</span><span>사진</span><span>객실명</span><span>종류</span><span>최대 인원</span><span>1박 요금</span><span>상태</span><span>관리</span></div>
+
+<div class="row" style="padding: 0 12px">
+<span>1</span>
+<span style="width: 52px; height: 36px; background: #E5E7EB; border-radius: 4px"></span>
+<span>[객실명]</span><span>[종류]</span><span>[N]명</span><span>[금액]원</span>
+<span><span class="badge-on">사용 중</span></span>
+<span style="display: flex; gap: 6px"><button class="sbtn">수정</button><button class="sbtn">비활성화</button></span>
+</div>
+
+<div class="row" style="padding: 0 12px">
+<span>2</span>
+<span style="width: 52px; height: 36px; background: #E5E7EB; border-radius: 4px"></span>
+<span>[객실명]</span><span>[종류]</span><span>[N]명</span><span>[금액]원</span>
+<span><span class="badge-on">사용 중</span></span>
+<span style="display: flex; gap: 6px"><button class="sbtn">수정</button><button class="sbtn">비활성화</button></span>
+</div>
+
+<div class="row" style="padding: 0 12px">
+<span>3</span>
+<span style="width: 52px; height: 36px; background: #E5E7EB; border-radius: 4px"></span>
+<span>[객실명]</span><span>[종류]</span><span>[N]명</span><span>[금액]원</span>
+<span><span class="badge-on">사용 중</span></span>
+<span style="display: flex; gap: 6px"><button class="sbtn">수정</button><button class="sbtn">비활성화</button></span>
+</div>
+
+<div class="row off" style="padding: 0 12px">
+<span>4</span>
+<span style="width: 52px; height: 36px; background: #E5E7EB; border-radius: 4px"></span>
+<span>[객실명]</span><span>[종류]</span><span>[N]명</span><span>[금액]원</span>
+<span><span class="badge-off">비활성</span></span>
+<span style="display: flex; gap: 6px"><button class="sbtn">수정</button><button class="sbtn">활성화</button></span>
+</div>
+
+</div>
+</div>
+
+<div style="display: flex; gap: 10px; align-items: flex-start">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span>
+<div style="flex-grow: 1; border: 1px solid #1F2937; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="font-size: 15px; font-weight: 700">객실 추가 / 수정</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="rn" style="font-size: 12px; color: #4B5563">객실명 *</label><input id="rn" style="height: 40px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="rt" style="font-size: 12px; color: #4B5563">객실 종류 *</label><input id="rt" style="height: 40px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px" placeholder="선택 ▾"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="mg" style="font-size: 12px; color: #4B5563">최대 인원 *</label><input id="mg" style="height: 40px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pr" style="font-size: 12px; color: #4B5563">1박 요금 *</label><input id="pr" style="height: 40px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px"></div>
+</div>
+<div style="display: flex; gap: 14px">
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px"><label for="ds" style="font-size: 12px; color: #4B5563">객실 설명</label><textarea id="ds" style="height: 70px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 10px; font-family: inherit; font-size: 14px; resize: none"></textarea></div>
+<div style="width: 220px; display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: #4B5563">객실 사진</span><div style="height: 70px; border: 1px dashed #9CA3AF; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #4B5563">+ 사진 올리기 (최대 5장)</div></div>
+</div>
+<div style="display: flex; justify-content: flex-end; gap: 8px">
+<button style="height: 44px; padding: 0 22px; background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 6px; font-family: inherit; font-size: 14px; color: #1F2937">취소</button>
+<button style="height: 44px; padding: 0 22px; background: #1F2937; color: #FFFFFF; border: none; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 700">저장</button>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<div style="width: 540px; box-sizing: border-box; padding: 32px; border-left: 1px solid #D1D5DB; display: flex; flex-direction: column; gap: 18px">
+<div style="font-size: 18px; font-weight: 700; padding-bottom: 10px; border-bottom: 1px solid #1F2937">설명 (Description)</div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">1</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">검색 · 필터 · 추가</div><div style="color: #374151">객실명으로 검색, 상태별로 걸러 보기. "+ 객실 추가"를 누르면 ③ 입력 칸이 빈 상태로 열린다. 관리자(ADMIN)만 들어올 수 있다.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">객실 목록</div><div style="color: #374151">수정: ③에 기존 내용을 채워서 연다. 비활성화: "비활성화하시겠습니까?" 확인 후 is_active = N. 비활성 객실은 손님 추천 화면에 안 보이지만, 이미 잡힌 예약은 그대로 유지된다. 삭제 기능은 두지 않는다(예약 기록 보호).</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">객실 추가 / 수정</div><div style="color: #374151">* 표시는 꼭 입력. 최대 인원 1명 이상, 요금 0원 초과 숫자만. 사진은 jpg, png만, 최대 5장(첨부파일 테이블에 저장). 같은 객실명은 중복 불가.</div></div></div>
+
+<div style="margin-top: auto; background: #F3F4F6; border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.7">
+<div style="font-weight: 700; margin-bottom: 4px">연결 API</div>
+<div style="font-family: monospace">GET /admin/rooms</div><div style="color: #374151; margin-bottom: 4px">객실 목록</div>
+<div style="font-family: monospace">POST /admin/rooms</div><div style="color: #374151; margin-bottom: 4px">객실 추가</div>
+<div style="font-family: monospace">PUT /admin/rooms/{roomId}</div><div style="color: #374151; margin-bottom: 4px">객실 수정</div>
+<div style="font-family: monospace">PATCH /admin/rooms/{roomId}/status</div><div style="color: #374151; margin-bottom: 4px">활성화 / 비활성화</div>
+<div style="font-family: monospace">POST /files</div><div style="color: #374151">사진 올리기</div>
+</div>
+</div>
+
+</div>
+</div>
+</div></div></figure>
+</section><section id="row3" class="row-sec">
+<header class="row-head"><span class="row-num">3</span><h2>예약 일자 테이블 · 관리자 예약 일자 관리 화면</h2></header>
+<h3>DB 설계</h3>
+<p class="lead">달력에 휴무일을 표시하는 메모장이에요. room_id를 비우면 호텔 전체 휴무, 방 번호를 적으면 그 방만 휴무예요. 손님 예약 화면 달력이 이 표를 보고 휴무일을 막아요.</p>
+<div class="erd-box"><pre class="mermaid">erDiagram
+  ROOM |o--o{ CLOSED_DATE : &quot;쉬는 날&quot;
+  ROOM {
+    bigint room_id PK &quot;객실 번호&quot;
+    varchar room_name &quot;객실 이름 중복 불가&quot;
+  }
+  CLOSED_DATE {
+    bigint closed_date_id PK &quot;휴무 번호&quot;
+    bigint room_id FK &quot;객실 번호 비어 있으면 호텔 전체 휴무&quot;
+    date closed_date &quot;쉬는 날짜&quot;
+    varchar reason &quot;사유&quot;
+    datetime created_at &quot;등록한 시각&quot;
+  }</pre></div>
+<div class="spec"><h4>CLOSED_DATE <span>예약 일자 (휴무일) 테이블</span></h4>
+<div class="tscroll"><table><thead><tr><th>컬럼</th><th>타입</th><th>키</th><th>설명</th></tr></thead><tbody><tr><td><code>closed_date_id</code></td><td>bigint</td><td>PK</td><td>휴무 번호</td></tr><tr><td><code>room_id</code></td><td>bigint</td><td>FK</td><td>객실 번호 (비어 있으면 호텔 전체 휴무)</td></tr><tr><td><code>closed_date</code></td><td>date</td><td></td><td>쉬는 날짜</td></tr><tr><td><code>reason</code></td><td>varchar</td><td></td><td>사유</td></tr><tr><td><code>created_at</code></td><td>datetime</td><td></td><td>등록한 시각</td></tr></tbody></table></div></div>
+<h3>화면 설계서</h3>
+<figure class="screen"><figcaption><b>ADM-002</b> 관리자) 예약 일자 관리 화면</figcaption><div class="board-fit"><div class="board" id="scr-admindate">
+<div style="width: 1600px; height: 1080px; box-sizing: border-box; font-family: 'Noto Sans KR', sans-serif; color: #1F2937; background: #FFFFFF; display: flex; flex-direction: column">
+
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-bottom: 2px solid #1F2937">
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">프로젝트</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">호텔 예약 시스템</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면명</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">관리자) 예약 일자 관리</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면 ID</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">ADM-002</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">작성자</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">조준엽</div></div>
+<div style="padding: 16px 24px"><div style="font-size: 12px; color: #4B5563">작성일</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">2026-11-19</div></div>
+</div>
+
+<div style="display: flex; flex-grow: 1">
+
+<div style="width: 1060px; box-sizing: border-box; padding: 32px; background: #F9FAFB">
+<div style="background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 10px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column">
+
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; border-bottom: 1px solid #E5E7EB">
+<div style="font-size: 18px; font-weight: 700; letter-spacing: 2px">HOTEL <span style="font-size: 13px; font-weight: 500; letter-spacing: 0; color: #4B5563">관리자</span></div>
+<div style="display: flex; gap: 24px; font-size: 14px; color: #4B5563"><span>객실 관리</span><span style="color: #1F2937; font-weight: 700">예약 일자 관리</span><span>예약 관리</span><span>로그아웃</span></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 20px; padding: 24px 28px">
+
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">1</span>
+<label for="rs" style="font-size: 14px; font-weight: 700">객실</label>
+<input id="rs" style="width: 220px; height: 44px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px" value="전체 객실 ▾">
+<div style="margin-left: auto; font-size: 16px; font-weight: 700">‹  2026년 12월  ›</div>
+</div>
+
+<div style="display: flex; gap: 20px; align-items: flex-start">
+
+<div style="display: flex; gap: 10px; align-items: flex-start; flex-grow: 1">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span>
+<div style="flex-grow: 1">
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; font-size: 12px; color: #4B5563; text-align: center; margin-bottom: 6px">
+<span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px">
+
+<div class="c blank"><span></span><span class="sub"></span></div>
+
+<div class="c blank"><span></span><span class="sub"></span></div>
+
+<div class="c"><span>1</span><span class="sub"></span></div>
+
+<div class="c"><span>2</span><span class="sub"></span></div>
+
+<div class="c"><span>3</span><span class="sub"></span></div>
+
+<div class="c"><span>4</span><span class="sub"></span></div>
+
+<div class="c"><span>5</span><span class="sub"></span></div>
+
+<div class="c"><span>6</span><span class="sub"></span></div>
+
+<div class="c"><span>7</span><span class="sub"></span></div>
+
+<div class="c"><span>8</span><span class="sub"></span></div>
+
+<div class="c"><span>9</span><span class="sub"></span></div>
+
+<div class="c"><span>10</span><span class="sub"></span></div>
+
+<div class="c"><span>11</span><span class="sub"></span></div>
+
+<div class="c"><span>12</span><span class="sub"></span></div>
+
+<div class="c"><span>13</span><span class="sub"></span></div>
+
+<div class="c"><span>14</span><span class="sub"></span></div>
+
+<div class="c has"><span>15</span><span class="sub">예약 1</span></div>
+
+<div class="c has"><span>16</span><span class="sub">예약 1</span></div>
+
+<div class="c has"><span>17</span><span class="sub">예약 1</span></div>
+
+<div class="c"><span>18</span><span class="sub"></span></div>
+
+<div class="c"><span>19</span><span class="sub"></span></div>
+
+<div class="c"><span>20</span><span class="sub"></span></div>
+
+<div class="c"><span>21</span><span class="sub"></span></div>
+
+<div class="c"><span>22</span><span class="sub"></span></div>
+
+<div class="c"><span>23</span><span class="sub"></span></div>
+
+<div class="c has"><span>24</span><span class="sub">예약 1</span></div>
+
+<div class="c has"><span>25</span><span class="sub">예약 1</span></div>
+
+<div class="c"><span>26</span><span class="sub"></span></div>
+
+<div class="c"><span>27</span><span class="sub"></span></div>
+
+<div class="c"><span>28</span><span class="sub"></span></div>
+
+<div class="c"><span>29</span><span class="sub"></span></div>
+
+<div class="c"><span>30</span><span class="sub"></span></div>
+
+<div class="c closed pick"><span>31</span><span class="sub">휴무</span></div>
+
+</div>
+<div style="display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: #4B5563">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 14px; border-radius: 3px; background: #FEF2F2; border: 1px solid #FCA5A5"></span>휴무일</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 14px; border-radius: 3px; border: 2px solid #1F2937; box-sizing: border-box"></span>선택한 날짜</span>
+<span>"예약 N" = 그날 잡힌 예약 수</span>
+</div>
+</div>
+</div>
+
+<div style="width: 290px; flex-shrink: 0; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; gap: 10px; align-items: flex-start">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span>
+<div style="flex-grow: 1; border: 1px solid #1F2937; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="font-size: 15px; font-weight: 700">12월 31일 (목)</div>
+<div style="font-size: 13px; color: #374151">이 날 예약 0건</div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="rsn" style="font-size: 12px; color: #4B5563">휴무 사유</label><input id="rsn" style="height: 40px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px" value="연말 시설 점검"></div>
+<button style="height: 44px; background: #1F2937; color: #FFFFFF; border: none; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 700">휴무일로 지정</button>
+<button style="height: 44px; background: #FFFFFF; color: #1F2937; border: 1px solid #D1D5DB; border-radius: 6px; font-family: inherit; font-size: 14px">휴무 해제</button>
+</div>
+</div>
+
+<div style="display: flex; gap: 10px; align-items: flex-start">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">4</span>
+<div style="flex-grow: 1; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px; font-size: 13px">
+<div style="font-size: 14px; font-weight: 700">이번 달 휴무일</div>
+<div style="display: flex; justify-content: space-between; align-items: center"><span>12/31 전체 · 연말 시설 점검</span><span style="color: #B91C1C">해제</span></div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+</div>
+
+<div style="width: 540px; box-sizing: border-box; padding: 32px; border-left: 1px solid #D1D5DB; display: flex; flex-direction: column; gap: 18px">
+<div style="font-size: 18px; font-weight: 700; padding-bottom: 10px; border-bottom: 1px solid #1F2937">설명 (Description)</div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">1</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">객실 선택 · 월 이동</div><div style="color: #374151">"전체 객실"을 고르면 호텔 전체 휴무, 특정 객실을 고르면 그 방만 휴무로 지정한다. 화살표로 달을 넘긴다.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">캘린더</div><div style="color: #374151">날짜마다 휴무 여부와 그날 잡힌 예약 수(대기 + 승인)를 보여준다. 날짜를 누르면 ③에 그 날짜가 열린다. 지난 날짜는 누를 수 없다.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">휴무일 지정 / 해제</div><div style="color: #374151">예약이 1건이라도 있는 날은 휴무 지정 불가. "이 날짜에 예약 N건이 있습니다. 먼저 예약을 취소해 주세요" 안내를 띄운다. 지정된 휴무일은 손님 예약 화면 달력에서 막힌다.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">4</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">이번 달 휴무일 목록</div><div style="color: #374151">보고 있는 달의 휴무일을 한눈에 보여준다. 해제를 누르면 확인 후 바로 풀린다.</div></div></div>
+
+<div style="margin-top: auto; background: #F3F4F6; border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.7">
+<div style="font-weight: 700; margin-bottom: 4px">연결 API</div>
+<div style="font-family: monospace">GET /admin/closed-dates</div><div style="color: #374151; margin-bottom: 4px">달의 휴무일 + 날짜별 예약 수 (월, 객실)</div>
+<div style="font-family: monospace">POST /admin/closed-dates</div><div style="color: #374151; margin-bottom: 4px">휴무일 지정</div>
+<div style="font-family: monospace">DELETE /admin/closed-dates/{closedDateId}</div><div style="color: #374151">휴무 해제</div>
+</div>
+</div>
+
+</div>
+</div>
+</div></div></figure>
+</section><section id="row4" class="row-sec">
+<header class="row-head"><span class="row-num">4</span><h2>객실 예약 테이블 · 객실 예약 화면</h2></header>
+<h3>DB 설계</h3>
+<p class="lead">예약 장부예요. 누가, 어느 방을, 언제부터 언제까지, 몇 명이, 얼마에 예약했는지 적어요. status는 PENDING(대기)으로 시작해서 관리자가 APPROVED(승인) 또는 CANCELED(취소)로 바꿔요.</p>
+<div class="erd-box"><pre class="mermaid">erDiagram
+  MEMBER ||--o{ RESERVATION : &quot;예약한다&quot;
+  ROOM ||--o{ RESERVATION : &quot;예약된다&quot;
+  MEMBER {
+    bigint member_id PK &quot;회원 번호&quot;
+    varchar name &quot;이름&quot;
+  }
+  ROOM {
+    bigint room_id PK &quot;객실 번호&quot;
+    int max_guest &quot;최대 인원&quot;
+    int price &quot;1박 요금&quot;
+  }
+  RESERVATION {
+    bigint reservation_id PK &quot;예약 번호&quot;
+    bigint member_id FK &quot;예약한 회원&quot;
+    bigint room_id FK &quot;예약한 객실&quot;
+    date check_in_date &quot;입실 날짜&quot;
+    date check_out_date &quot;퇴실 날짜&quot;
+    int guest_count &quot;인원&quot;
+    int total_price &quot;총 금액&quot;
+    varchar status &quot;PENDING 대기 APPROVED 승인 CANCELED 취소&quot;
+    varchar request_memo &quot;요청 사항 최대 200자&quot;
+    datetime created_at &quot;예약한 시각&quot;
+    datetime updated_at &quot;상태 바뀐 시각&quot;
+  }</pre></div>
+<div class="spec"><h4>RESERVATION <span>객실 예약 테이블</span></h4>
+<div class="tscroll"><table><thead><tr><th>컬럼</th><th>타입</th><th>키</th><th>설명</th></tr></thead><tbody><tr><td><code>reservation_id</code></td><td>bigint</td><td>PK</td><td>예약 번호</td></tr><tr><td><code>member_id</code></td><td>bigint</td><td>FK</td><td>예약한 회원</td></tr><tr><td><code>room_id</code></td><td>bigint</td><td>FK</td><td>예약한 객실</td></tr><tr><td><code>check_in_date</code></td><td>date</td><td></td><td>입실 날짜</td></tr><tr><td><code>check_out_date</code></td><td>date</td><td></td><td>퇴실 날짜</td></tr><tr><td><code>guest_count</code></td><td>int</td><td></td><td>인원</td></tr><tr><td><code>total_price</code></td><td>int</td><td></td><td>총 금액</td></tr><tr><td><code>status</code></td><td>varchar</td><td></td><td>PENDING(대기) / APPROVED(승인) / CANCELED(취소)</td></tr><tr><td><code>request_memo</code></td><td>varchar</td><td></td><td>요청 사항 (최대 200자)</td></tr><tr><td><code>created_at</code></td><td>datetime</td><td></td><td>예약한 시각</td></tr><tr><td><code>updated_at</code></td><td>datetime</td><td></td><td>상태 바뀐 시각</td></tr></tbody></table></div></div>
+<h3>화면 설계서</h3>
+<figure class="screen"><figcaption><b>RSV-001</b> 객실 예약 화면</figcaption><div class="board-fit"><div class="board" id="scr-main">
+<div style="width: 1600px; height: 1080px; box-sizing: border-box; font-family: 'Noto Sans KR', sans-serif; color: #1F2937; background: #FFFFFF; display: flex; flex-direction: column">
+
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-bottom: 2px solid #1F2937">
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">프로젝트</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">호텔 예약 시스템</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면명</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">객실 예약</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면 ID</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">RSV-001</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">작성자</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">조준엽</div></div>
+<div style="padding: 16px 24px"><div style="font-size: 12px; color: #4B5563">작성일</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">2026-11-19</div></div>
+</div>
+
+<div style="display: flex; flex-grow: 1">
+
+<div style="width: 1060px; box-sizing: border-box; padding: 32px; background: #F9FAFB">
+<div style="background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 10px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column">
+
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; border-bottom: 1px solid #E5E7EB">
+<div style="font-size: 18px; font-weight: 700; letter-spacing: 2px">HOTEL</div>
+<div style="display: flex; gap: 24px; font-size: 14px; color: #4B5563"><span>객실 추천</span><span>내 예약</span><span>로그아웃</span></div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; padding: 28px">
+
+<div style="display: flex; flex-direction: column; gap: 20px">
+<div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px">
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px"><span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">1</span><span style="font-size: 14px; font-weight: 700">객실 정보</span></div>
+<div style="display: flex; gap: 16px">
+<div style="width: 140px; height: 100px; background: #E5E7EB; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #4B5563">객실 사진</div>
+<div style="display: flex; flex-direction: column; gap: 6px; font-size: 14px">
+<div style="font-size: 16px; font-weight: 700">[객실명]</div>
+<div>1박 요금 [금액]원</div>
+<div>최대 인원 [N]명</div>
+</div>
+</div>
+</div>
+
+<div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px">
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span><span style="font-size: 14px; font-weight: 700">날짜 선택</span></div>
+<div style="font-size: 14px; font-weight: 500">‹  2026년 12월  ›</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; font-size: 12px; color: #4B5563; text-align: center; margin-bottom: 4px">
+<span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px">
+
+<div class="d"></div>
+
+<div class="d"></div>
+
+<div class="d">1</div>
+
+<div class="d">2</div>
+
+<div class="d">3</div>
+
+<div class="d">4</div>
+
+<div class="d">5</div>
+
+<div class="d">6</div>
+
+<div class="d">7</div>
+
+<div class="d">8</div>
+
+<div class="d">9</div>
+
+<div class="d">10</div>
+
+<div class="d">11</div>
+
+<div class="d">12</div>
+
+<div class="d">13</div>
+
+<div class="d">14</div>
+
+<div class="d booked">15</div>
+
+<div class="d booked">16</div>
+
+<div class="d booked">17</div>
+
+<div class="d">18</div>
+
+<div class="d">19</div>
+
+<div class="d">20</div>
+
+<div class="d">21</div>
+
+<div class="d">22</div>
+
+<div class="d">23</div>
+
+<div class="d sel">24</div>
+
+<div class="d range">25</div>
+
+<div class="d sel">26</div>
+
+<div class="d">27</div>
+
+<div class="d">28</div>
+
+<div class="d">29</div>
+
+<div class="d">30</div>
+
+<div class="d holiday">31</div>
+
+</div>
+<div style="display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: #4B5563; flex-wrap: wrap">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 14px; border-radius: 3px; background: #1F2937"></span>체크인·체크아웃</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 14px; border-radius: 3px; background: #E5E7EB"></span>숙박일</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 14px; border-radius: 3px; background: #F3F4F6; border: 1px solid #D1D5DB"></span>예약 마감</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 14px; height: 14px; border-radius: 3px; background: #FEF2F2; border: 1px solid #FCA5A5"></span>휴무일</span>
+</div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 20px">
+<div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px">
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px"><span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">3</span><span style="font-size: 14px; font-weight: 700">인원</span></div>
+<div style="display: flex; align-items: center; gap: 12px">
+<button style="width: 44px; height: 44px; border: 1px solid #D1D5DB; background: #FFFFFF; border-radius: 6px; font-size: 18px; color: #1F2937" aria-label="인원 줄이기">−</button>
+<span style="font-size: 16px; font-weight: 700; width: 40px; text-align: center">2명</span>
+<button style="width: 44px; height: 44px; border: 1px solid #D1D5DB; background: #FFFFFF; border-radius: 6px; font-size: 18px; color: #1F2937" aria-label="인원 늘리기">+</button>
+</div>
+</div>
+
+<div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px">
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px"><span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">4</span><label for="memo" style="font-size: 14px; font-weight: 700">요청 사항 (선택)</label></div>
+<textarea id="memo" style="width: 100%; box-sizing: border-box; height: 96px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 10px; font-family: inherit; font-size: 14px; resize: none" placeholder="예: 높은 층으로 부탁드려요"></textarea>
+<div style="text-align: right; font-size: 12px; color: #4B5563; margin-top: 4px">0 / 200자</div>
+</div>
+
+<div style="border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px">
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px"><span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">5</span><span style="font-size: 14px; font-weight: 700">결제 금액</span></div>
+<div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px">
+<div style="display: flex; justify-content: space-between"><span style="color: #4B5563">체크인</span><span>12월 24일 (목)</span></div>
+<div style="display: flex; justify-content: space-between"><span style="color: #4B5563">체크아웃</span><span>12월 26일 (토)</span></div>
+<div style="display: flex; justify-content: space-between"><span style="color: #4B5563">1박 요금 × 숙박일수</span><span>[금액]원 × 2박</span></div>
+<div style="border-top: 1px solid #E5E7EB; padding-top: 10px; display: flex; justify-content: space-between; font-size: 16px; font-weight: 700"><span>총 금액</span><span>[총 금액]원</span></div>
+</div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">6</span>
+<button style="flex-grow: 1; height: 52px; background: #1F2937; color: #FFFFFF; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; font-family: inherit">예약하기</button>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<div style="width: 540px; box-sizing: border-box; padding: 32px; border-left: 1px solid #D1D5DB; display: flex; flex-direction: column; gap: 18px">
+<div style="font-size: 18px; font-weight: 700; padding-bottom: 10px; border-bottom: 1px solid #1F2937">설명 (Description)</div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">1</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">객실 정보</div><div style="color: #374151">객실 추천 화면에서 고른 객실의 사진, 이름, 1박 요금, 최대 인원을 보여준다. (객실 테이블에서 가져옴)</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">날짜 선택</div><div style="color: #374151">첫 번째 클릭은 체크인, 두 번째 클릭은 체크아웃. 지난 날짜, 휴무일, 이미 예약된 날짜는 고를 수 없다. 체크아웃은 체크인 다음 날부터 가능하고, 사이에 막힌 날이 끼면 선택 불가.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">인원</div><div style="color: #374151">1명부터 객실 최대 인원까지만 고를 수 있다. 끝에 닿으면 버튼이 비활성화된다.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">4</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">요청 사항</div><div style="color: #374151">선택 입력, 최대 200자.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">5</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">결제 금액</div><div style="color: #374151">1박 요금 × 숙박일수로 자동 계산한다. 날짜를 바꾸면 바로 다시 계산.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">6</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">예약하기</div><div style="color: #374151">날짜를 다 고르기 전엔 비활성화. 누르면 "예약하시겠습니까?" 확인 팝업 → 예약 저장(상태: 대기) → 예약 완료 화면(RSV-002)으로 이동. 로그인 안 한 사람은 로그인 화면으로 보낸다.</div></div></div>
+
+<div style="margin-top: auto; background: #F3F4F6; border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.7">
+<div style="font-weight: 700; margin-bottom: 4px">연결 API</div>
+<div style="font-family: monospace">GET /rooms/{roomId}/available-dates</div>
+<div style="color: #374151; margin-bottom: 6px">달력에 막힌 날짜 불러오기</div>
+<div style="font-family: monospace">POST /reservations</div>
+<div style="color: #374151">예약 저장</div>
+</div>
+</div>
+
+</div>
+</div>
+</div></div></figure><figure class="screen"><figcaption><b>RSV-002</b> 예약 완료 화면</figcaption><div class="board-fit"><div class="board" id="scr-complete">
+<div style="width: 1600px; height: 1080px; box-sizing: border-box; font-family: 'Noto Sans KR', sans-serif; color: #1F2937; background: #FFFFFF; display: flex; flex-direction: column">
+
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-bottom: 2px solid #1F2937">
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">프로젝트</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">호텔 예약 시스템</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면명</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">예약 완료</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면 ID</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">RSV-002</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">작성자</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">조준엽</div></div>
+<div style="padding: 16px 24px"><div style="font-size: 12px; color: #4B5563">작성일</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">2026-11-19</div></div>
+</div>
+
+<div style="display: flex; flex-grow: 1">
+
+<div style="width: 1060px; box-sizing: border-box; padding: 32px; background: #F9FAFB">
+<div style="background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 10px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column">
+
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; border-bottom: 1px solid #E5E7EB">
+<div style="font-size: 18px; font-weight: 700; letter-spacing: 2px">HOTEL</div>
+<div style="display: flex; gap: 24px; font-size: 14px; color: #4B5563"><span>객실 추천</span><span>내 예약</span><span>로그아웃</span></div>
+</div>
+
+<div style="display: flex; flex-direction: column; align-items: center; padding: 56px 28px; gap: 28px">
+
+<div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
+<div style="display: flex; align-items: center; gap: 10px"><span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">1</span>
+<svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#1F2937" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M8 12l3 3 5-6"></path></svg>
+</div>
+<div style="font-size: 24px; font-weight: 700">예약 신청이 완료되었어요</div>
+<div style="font-size: 15px; color: #4B5563">관리자가 승인하면 예약이 확정돼요.</div>
+</div>
+
+<div style="display: flex; align-items: flex-start; gap: 10px">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span>
+<div style="width: 480px; border: 1px solid #E5E7EB; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+<div style="display: flex; justify-content: space-between"><span style="color: #4B5563">예약 번호</span><span>[예약 번호]</span></div>
+<div style="display: flex; justify-content: space-between"><span style="color: #4B5563">객실</span><span>[객실명]</span></div>
+<div style="display: flex; justify-content: space-between"><span style="color: #4B5563">체크인</span><span>12월 24일 (목)</span></div>
+<div style="display: flex; justify-content: space-between"><span style="color: #4B5563">체크아웃</span><span>12월 26일 (토)</span></div>
+<div style="display: flex; justify-content: space-between"><span style="color: #4B5563">인원</span><span>2명</span></div>
+<div style="display: flex; justify-content: space-between"><span style="color: #4B5563">총 금액</span><span style="font-weight: 700">[총 금액]원</span></div>
+<div style="border-top: 1px solid #E5E7EB; padding-top: 10px; display: flex; justify-content: space-between; align-items: center"><span style="color: #4B5563">예약 상태</span>
+<span style="display: flex; align-items: center; gap: 8px"><span style="width: 20px; height: 20px; border-radius: 10px; background: #C2410C; color: #FFFFFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">3</span><span style="background: #FEF3C7; color: #92400E; font-weight: 700; font-size: 13px; padding: 4px 10px; border-radius: 12px">승인 대기</span></span></div>
+</div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">4</span>
+<button style="width: 230px; height: 52px; background: #FFFFFF; color: #1F2937; border: 1px solid #1F2937; border-radius: 8px; font-size: 16px; font-weight: 500; font-family: inherit">홈으로</button>
+<button style="width: 230px; height: 52px; background: #1F2937; color: #FFFFFF; border: none; border-radius: 8px; font-size: 16px; font-weight: 700; font-family: inherit">내 예약 보기</button>
+</div>
+
+</div>
+</div>
+</div>
+
+<div style="width: 540px; box-sizing: border-box; padding: 32px; border-left: 1px solid #D1D5DB; display: flex; flex-direction: column; gap: 18px">
+<div style="font-size: 18px; font-weight: 700; padding-bottom: 10px; border-bottom: 1px solid #1F2937">설명 (Description)</div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">1</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">완료 안내</div><div style="color: #374151">예약이 저장되면 보여주는 화면. 아직 확정이 아니라 관리자 승인이 필요하다는 걸 알려준다.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">예약 요약</div><div style="color: #374151">방금 저장된 예약 정보를 보여준다. (예약 테이블에서 가져옴)</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">예약 상태</div><div style="color: #374151">처음엔 항상 "승인 대기"(PENDING). 관리자 예약 관리 화면에서 승인하면 "승인"(APPROVED), 취소하면 "취소"(CANCELED)로 바뀐다.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">4</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">이동 버튼</div><div style="color: #374151">홈으로: 객실 추천 화면으로 이동. 내 예약 보기: 내 예약 목록 화면으로 이동.</div></div></div>
+
+<div style="margin-top: auto; background: #F3F4F6; border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.7">
+<div style="font-weight: 700; margin-bottom: 4px">연결 API</div>
+<div style="font-family: monospace">GET /reservations/{reservationId}</div>
+<div style="color: #374151">예약 상세 불러오기</div>
+</div>
+</div>
+
+</div>
+</div>
+</div></div></figure>
+</section><section id="row5" class="row-sec">
+<header class="row-head"><span class="row-num">5</span><h2>공통 테이블 · 관리자 예약 관리 화면</h2></header>
+<h3>DB 설계</h3>
+<p class="lead">여러 화면이 같이 쓰는 서랍이에요. 첨부파일은 target_type과 target_id 이름표로 주인을 적어서 어떤 파일이든 담고, 메뉴는 화면 위쪽 메뉴를 표로 관리해요. parent_id로 큰 메뉴 안에 작은 메뉴를 넣어요.</p>
+<div class="erd-box"><pre class="mermaid">erDiagram
+  ROOM ||--o{ ATTACH_FILE : &quot;사진&quot;
+  ROOM {
+    bigint room_id PK &quot;객실 번호&quot;
+    varchar room_name &quot;객실 이름 중복 불가&quot;
+  }
+  ATTACH_FILE {
+    bigint file_id PK &quot;파일 번호&quot;
+    varchar target_type &quot;어디 파일인지 예 ROOM&quot;
+    bigint target_id &quot;그 대상의 번호&quot;
+    varchar original_name &quot;원래 파일 이름&quot;
+    varchar saved_path &quot;저장된 위치&quot;
+    bigint file_size &quot;파일 크기&quot;
+    datetime created_at &quot;올린 시각&quot;
+  }
+  MENU {
+    bigint menu_id PK &quot;메뉴 번호&quot;
+    bigint parent_id &quot;상위 메뉴 번호&quot;
+    varchar menu_name &quot;메뉴 이름&quot;
+    varchar menu_url &quot;이동할 주소&quot;
+    varchar role &quot;보이는 사람 USER ADMIN&quot;
+    int sort_order &quot;순서&quot;
+    char is_used &quot;사용 여부 Y N&quot;
+  }</pre></div>
+<div class="spec"><h4>ATTACH_FILE <span>첨부파일 (공통) 테이블</span></h4>
+<div class="tscroll"><table><thead><tr><th>컬럼</th><th>타입</th><th>키</th><th>설명</th></tr></thead><tbody><tr><td><code>file_id</code></td><td>bigint</td><td>PK</td><td>파일 번호</td></tr><tr><td><code>target_type</code></td><td>varchar</td><td></td><td>어디 파일인지 (예: ROOM)</td></tr><tr><td><code>target_id</code></td><td>bigint</td><td></td><td>그 대상의 번호</td></tr><tr><td><code>original_name</code></td><td>varchar</td><td></td><td>원래 파일 이름</td></tr><tr><td><code>saved_path</code></td><td>varchar</td><td></td><td>저장된 위치</td></tr><tr><td><code>file_size</code></td><td>bigint</td><td></td><td>파일 크기</td></tr><tr><td><code>created_at</code></td><td>datetime</td><td></td><td>올린 시각</td></tr></tbody></table></div></div><div class="spec"><h4>MENU <span>메뉴 (공통) 테이블</span></h4>
+<div class="tscroll"><table><thead><tr><th>컬럼</th><th>타입</th><th>키</th><th>설명</th></tr></thead><tbody><tr><td><code>menu_id</code></td><td>bigint</td><td>PK</td><td>메뉴 번호</td></tr><tr><td><code>parent_id</code></td><td>bigint</td><td></td><td>상위 메뉴 번호</td></tr><tr><td><code>menu_name</code></td><td>varchar</td><td></td><td>메뉴 이름</td></tr><tr><td><code>menu_url</code></td><td>varchar</td><td></td><td>이동할 주소</td></tr><tr><td><code>role</code></td><td>varchar</td><td></td><td>보이는 사람 (USER / ADMIN)</td></tr><tr><td><code>sort_order</code></td><td>int</td><td></td><td>순서</td></tr><tr><td><code>is_used</code></td><td>char</td><td></td><td>사용 여부 Y / N</td></tr></tbody></table></div></div>
+<h3>화면 설계서</h3>
+<figure class="screen"><figcaption><b>ADM-003</b> 관리자) 예약 관리 화면</figcaption><div class="board-fit"><div class="board" id="scr-adminreservation">
+<div style="width: 1600px; height: 1080px; box-sizing: border-box; font-family: 'Noto Sans KR', sans-serif; color: #1F2937; background: #FFFFFF; display: flex; flex-direction: column">
+
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-bottom: 2px solid #1F2937">
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">프로젝트</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">호텔 예약 시스템</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면명</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">관리자) 예약 관리</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">화면 ID</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">ADM-003</div></div>
+<div style="padding: 16px 24px; border-right: 1px solid #D1D5DB"><div style="font-size: 12px; color: #4B5563">작성자</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">조준엽</div></div>
+<div style="padding: 16px 24px"><div style="font-size: 12px; color: #4B5563">작성일</div><div style="font-size: 16px; font-weight: 700; margin-top: 4px">2026-11-19</div></div>
+</div>
+
+<div style="display: flex; flex-grow: 1">
+
+<div style="width: 1060px; box-sizing: border-box; padding: 32px; background: #F9FAFB">
+<div style="background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 10px; height: 100%; box-sizing: border-box; display: flex; flex-direction: column">
+
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 28px; border-bottom: 1px solid #E5E7EB">
+<div style="font-size: 18px; font-weight: 700; letter-spacing: 2px">HOTEL <span style="font-size: 13px; font-weight: 500; letter-spacing: 0; color: #4B5563">관리자</span></div>
+<div style="display: flex; gap: 24px; font-size: 14px; color: #4B5563"><span>객실 관리</span><span>예약 일자 관리</span><span style="color: #1F2937; font-weight: 700">예약 관리</span><span>로그아웃</span></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 20px; padding: 24px 28px">
+
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">1</span>
+<span class="tb">전체</span><span class="tb on">승인 대기 [N]</span><span class="tb">승인</span><span class="tb">취소</span>
+</div>
+
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span>
+<input aria-label="체크인 시작일" style="width: 150px; height: 44px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px" value="2026-12-01">
+<span>~</span>
+<input aria-label="체크인 종료일" style="width: 150px; height: 44px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px" value="2026-12-31">
+<input aria-label="예약자명 또는 예약 번호" style="flex-grow: 1; height: 44px; border: 1px solid #D1D5DB; border-radius: 6px; padding: 0 12px; font-family: inherit; font-size: 14px" placeholder="예약자명 또는 예약 번호">
+<button style="height: 44px; padding: 0 22px; background: #1F2937; color: #FFFFFF; border: none; border-radius: 6px; font-size: 14px; font-weight: 700; font-family: inherit">검색</button>
+</div>
+
+<div style="display: flex; gap: 10px; align-items: flex-start">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span>
+<div style="flex-grow: 1; border: 1px solid #E5E7EB; border-radius: 8px; overflow: hidden">
+<div class="row" style="background: #F3F4F6; font-weight: 700; min-height: 40px"><span>예약 번호</span><span>예약자</span><span>객실</span><span>숙박 기간</span><span>인원</span><span>금액</span><span>상태</span><span>관리</span></div>
+
+<div class="row">
+<span>[예약 번호]</span><span>[이름]</span><span>[객실명]</span><span>12/24 ~ 12/26</span><span>2명</span><span>[금액]원</span>
+<span class="b wait">승인 대기</span>
+<span style="display: flex; gap: 6px">
+<button class="sbtn dark">승인</button><button class="sbtn">취소</button>
+
+
+</span>
+</div>
+
+<div class="row">
+<span>[예약 번호]</span><span>[이름]</span><span>[객실명]</span><span>12/24 ~ 12/26</span><span>2명</span><span>[금액]원</span>
+<span class="b wait">승인 대기</span>
+<span style="display: flex; gap: 6px">
+<button class="sbtn dark">승인</button><button class="sbtn">취소</button>
+
+
+</span>
+</div>
+
+<div class="row">
+<span>[예약 번호]</span><span>[이름]</span><span>[객실명]</span><span>12/24 ~ 12/26</span><span>2명</span><span>[금액]원</span>
+<span class="b wait">승인 대기</span>
+<span style="display: flex; gap: 6px">
+<button class="sbtn dark">승인</button><button class="sbtn">취소</button>
+
+
+</span>
+</div>
+
+<div class="row">
+<span>[예약 번호]</span><span>[이름]</span><span>[객실명]</span><span>12/24 ~ 12/26</span><span>2명</span><span>[금액]원</span>
+<span class="b ok">승인</span>
+<span style="display: flex; gap: 6px">
+
+<button class="sbtn">취소</button>
+
+</span>
+</div>
+
+<div class="row">
+<span>[예약 번호]</span><span>[이름]</span><span>[객실명]</span><span>12/24 ~ 12/26</span><span>2명</span><span>[금액]원</span>
+<span class="b no">취소</span>
+<span style="display: flex; gap: 6px">
+
+
+<span style="color: #4B5563">-</span>
+</span>
+</div>
+
+</div>
+</div>
+
+<div style="display: flex; gap: 10px; align-items: flex-start">
+<span style="width: 24px; height: 24px; border-radius: 12px; background: #C2410C; color: #FFFFFF; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">4</span>
+<div style="flex-grow: 1; min-height: 230px; background: #E5E7EB; border-radius: 8px; display: flex; align-items: center; justify-content: center">
+<div style="width: 380px; background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 10px; padding: 22px; display: flex; flex-direction: column; gap: 12px">
+<div style="font-size: 16px; font-weight: 700">예약을 승인하시겠습니까?</div>
+<div style="font-size: 13px; color: #374151; line-height: 1.6">[객실명] · 12/24 ~ 12/26 · 2명<br>요청 사항: [요청 사항]</div>
+<div style="display: flex; justify-content: flex-end; gap: 8px">
+<button style="height: 44px; padding: 0 20px; background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 6px; font-family: inherit; font-size: 14px; color: #1F2937">닫기</button>
+<button style="height: 44px; padding: 0 20px; background: #1F2937; color: #FFFFFF; border: none; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 700">승인하기</button>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+</div>
+</div>
+
+<div style="width: 540px; box-sizing: border-box; padding: 32px; border-left: 1px solid #D1D5DB; display: flex; flex-direction: column; gap: 18px">
+<div style="font-size: 18px; font-weight: 700; padding-bottom: 10px; border-bottom: 1px solid #1F2937">설명 (Description)</div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">1</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">상태 탭</div><div style="color: #374151">처음엔 "승인 대기" 탭이 열린다. 탭 옆 숫자는 그 상태의 예약 수.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">2</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">검색</div><div style="color: #374151">체크인 날짜 기간과 예약자명 또는 예약 번호로 찾는다.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">3</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">예약 목록 · 승인 / 취소</div><div style="color: #374151">대기: 승인, 취소 둘 다 가능. 승인: 취소만 가능. 취소: 아무것도 못 함. 체크인 날짜가 지난 예약은 취소 불가. 상태가 바뀌면 updated_at에 시각을 남긴다.</div></div></div>
+
+<div style="display: flex; gap: 10px"><span style="width: 22px; height: 22px; border-radius: 11px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">4</span><div style="font-size: 14px; line-height: 1.6"><div style="font-weight: 700">확인 팝업</div><div style="color: #374151">승인, 취소 버튼을 누르면 예약 내용과 손님 요청 사항을 한 번 더 보여주고 확인받는다. 취소된 날짜는 다시 예약 가능해진다.</div></div></div>
+
+<div style="margin-top: auto; background: #F3F4F6; border-radius: 8px; padding: 14px 16px; font-size: 13px; line-height: 1.7">
+<div style="font-weight: 700; margin-bottom: 4px">연결 API</div>
+<div style="font-family: monospace">GET /admin/reservations</div><div style="color: #374151; margin-bottom: 4px">예약 목록 (상태, 기간, 검색어)</div>
+<div style="font-family: monospace">PATCH /admin/reservations/{id}/approve</div><div style="color: #374151; margin-bottom: 4px">승인</div>
+<div style="font-family: monospace">PATCH /admin/reservations/{id}/cancel</div><div style="color: #374151">취소</div>
+</div>
+</div>
+
+</div>
+</div>
+</div></div></figure>
+</section>
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+function fitBoards(){
+  document.querySelectorAll('.board-fit').forEach(function(w){
+    var b = w.querySelector('.board');
+    var s = Math.min(1, w.clientWidth / 1600);
+    b.style.transform = 'scale(' + s + ')';
+    w.style.height = (1080 * s) + 'px';
+  });
+}
+window.addEventListener('resize', fitBoards);
+fitBoards();
+try {
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', fontFamily: "'Noto Sans KR', sans-serif", er: { useMaxWidth: true } });
+} catch (e) {}
+</script>
+</body>
+</html>
