@@ -1,5 +1,6 @@
 """회원 — 자체 회원가입 · 로그인 · 로그아웃 · 내 정보 (테이블 member)
 
+API(router, 실제 주소는 앞에 /api):
 POST /members/signup            회원가입 (항상 USER로 가입)
 POST /members/login             로그인 → 세션 쿠키 발급 (5번 틀리면 10분 잠금)
 POST /members/logout            로그아웃 → 쿠키 삭제
@@ -8,11 +9,14 @@ PUT  /members/me                내 정보 수정 (이름 · 전화번호 · 이
 PUT  /members/me/password       비밀번호 변경 (현재 비밀번호 확인)
 POST /members/me/withdraw       탈퇴 (비밀번호 확인, 개인정보 삭제)
 POST /members/password-reset    비밀번호 찾기 (아이디 + 가입 이메일 확인 후 새 비밀번호)
+
+임시 HTML 화면(pages, /api 없음):
 GET  /signup /login /mypage /password-reset   화면
 GET  /logout                    로그아웃 후 로그인 화면으로 (상단 메뉴 링크용)
 
-다른 파트에서 로그인 확인: Depends(current_member), 관리자만: Depends(require_admin)
-관리자 계정 만들기: python create_admin.py <아이디> <이름>
+다른 파트에서 로그인 확인: from member.member import current_member, require_admin
+    Depends(current_member)  로그인한 회원,  Depends(require_admin)  관리자만
+관리자 계정 만들기: python -m member.create_admin <아이디> <이름>
 """
 import hashlib
 import hmac
@@ -24,9 +28,12 @@ import time
 from pathlib import Path
 
 import pymysql
-from fastapi import APIRouter, Cookie, Depends, FastAPI, HTTPException, Response
+from fastapi import APIRouter, Cookie, Depends, Response
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
+
+from common.common import DUPLICATE_KEY, LIVE_STATUSES, fail
+from db.connect import get_db
 
 HERE = Path(__file__).parent
 SESSION_COOKIE = "hotel_session"
@@ -38,38 +45,11 @@ if not os.getenv("SESSION_SECRET"):
 
 MAX_FAILS = 5
 LOCK_SECONDS = 10 * 60
-LIVE_STATUSES = ("PENDING", "APPROVED")
-DUPLICATE_KEY = 1062
 
 LOGIN_ID_RE = re.compile(r"^[A-Za-z0-9_]{4,50}$")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[0-9-]{9,20}$")
 MEMBER_COLUMNS = "member_id, login_id, name, phone, email, role, password"
-
-
-def connect():
-    # ponytail: 공통 backend/db/connect.py가 채워지면 그쪽으로 바꾼다.
-    return pymysql.connect(
-        host=os.getenv("DB_HOST", "127.0.0.1"),
-        port=int(os.getenv("DB_PORT", "3306")),
-        user=os.getenv("DB_USER", "root"),
-        password=os.getenv("DB_PASSWORD", ""),
-        database=os.getenv("DB_NAME", "hotel"),
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor,
-    )
-
-
-def get_db():
-    conn = connect()
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-
-def fail(status: int, code: str, message: str):
-    raise HTTPException(status, detail={"code": code, "message": message})
 
 
 # ---------- 비밀번호: 회원별 무작위 salt + scrypt 해시, "scrypt$salt$hash"로 저장 ----------
@@ -349,29 +329,22 @@ def reset_password(body: PasswordResetIn, db=Depends(get_db)):
     save_password(db, member["member_id"], body.new_password)
 
 
-# ---------- 화면 ----------
+# ---------- 임시 HTML 화면 (Next.js 화면이 생기면 지운다) ----------
+pages = APIRouter(include_in_schema=False)
+
+
 def page(name: str):
     return lambda: FileResponse(HERE / name)
 
 
 for _path, _file in {"/login": "login.html", "/signup": "signup.html",
                      "/mypage": "mypage.html", "/password-reset": "password-reset.html"}.items():
-    router.add_api_route(_path, page(_file), methods=["GET"], include_in_schema=False)
+    pages.add_api_route(_path, page(_file), methods=["GET"])
 
 
-@router.get("/logout", include_in_schema=False)
+@pages.get("/logout")
 def logout_page():
     # ponytail: 상단 메뉴의 링크로 로그아웃(GET). 남이 링크로 로그아웃시킬 수는 있지만 그 이상 피해는 없다.
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie(SESSION_COOKIE)
     return response
-
-
-app = FastAPI(title="태양의 호텔 · 회원")
-app.include_router(router)
-
-# 혼자 실행할 때 상단 메뉴(frontend/layout)가 있으면 같이 연다. 메인 앱에서는 메인 앱이 연다.
-_layout = HERE.parent.parent / "frontend" / "layout"
-if _layout.is_dir():
-    from fastapi.staticfiles import StaticFiles
-    app.mount("/layout", StaticFiles(directory=_layout), name="layout")

@@ -1,5 +1,0 @@
-fastapi
-uvicorn
-pymysql
-httpx
-pytest

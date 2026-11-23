@@ -1,56 +1,44 @@
-"""회원 API 통과 테스트. 실제 MariaDB에 hotel_test_member DB를 매번 새로 만든다(팀 DDL docs/hotel_reservation_ddl.sql).
+"""회원 API 통과 테스트. 로컬 MariaDB에 hotel_test_member DB를 매번 새로 만든다(팀 DDL, 시드 없음).
 
-실행: DB_PORT=3307 python -m pytest -q  (backend/member 폴더에서)
+실행: python -m pytest  (backend 폴더에서)
 """
-import os
-
-os.environ["DB_NAME"] = "hotel_test_member"  # member import 전에
-
-from pathlib import Path
 
 import pytest
 from fastapi import Depends
 from fastapi.testclient import TestClient
 
-import member as m
+from db.connect import connect
+from db.init_db import init_db
+from main import app
+from member import create_admin
+from member import member as m
 
-DDL = Path(__file__).parent.parent.parent / "docs" / "hotel_reservation_ddl.sql"
-client = TestClient(m.app)
+client = TestClient(app)
 
 
-@m.app.get("/test-admin-only")
+@app.get("/test-admin-only")
 def admin_only(admin: dict = Depends(m.require_admin)):
     return {"ok": True}
 
 
 @pytest.fixture(autouse=True)
-def fresh_db():
-    conn = m.pymysql.connect(host=os.getenv("DB_HOST", "127.0.0.1"), port=int(os.getenv("DB_PORT", "3306")),
-                             user=os.getenv("DB_USER", "root"), password=os.getenv("DB_PASSWORD", ""))
-    with conn.cursor() as cur:
-        cur.execute("DROP DATABASE IF EXISTS hotel_test_member")
-        cur.execute("CREATE DATABASE hotel_test_member CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-        cur.execute("USE hotel_test_member")
-        for stmt in DDL.read_text(encoding="utf-8").split(";"):
-            code = "\n".join(l for l in stmt.splitlines() if not l.strip().startswith("--")).strip()
-            if code:
-                cur.execute(code)
-    conn.commit()
-    conn.close()
+def fresh_db(monkeypatch):
+    monkeypatch.setenv("DB_NAME", "hotel_test_member")  # 이 파일의 테스트는 이 DB를 쓴다
+    init_db("hotel_test_member", seed=False)
     client.cookies.clear()
     m._fails.clear()
 
 
 def signup(login_id="guest01", password="password123", **extra):
-    return client.post("/members/signup", json={"loginId": login_id, "password": password, "name": "손님", **extra})
+    return client.post("/api/members/signup", json={"loginId": login_id, "password": password, "name": "손님", **extra})
 
 
 def login(login_id="guest01", password="password123"):
-    return client.post("/members/login", json={"loginId": login_id, "password": password})
+    return client.post("/api/members/login", json={"loginId": login_id, "password": password})
 
 
 def stored_password(login_id):
-    conn = m.connect()
+    conn = connect()
     with conn.cursor() as cur:
         cur.execute("SELECT password FROM member WHERE login_id = %s", (login_id,))
         row = cur.fetchone()
@@ -63,14 +51,14 @@ def test_signup_login_me_logout():
     assert r.status_code == 201, r.text
     assert r.json()["role"] == "USER"
 
-    assert client.get("/members/me").status_code == 401
+    assert client.get("/api/members/me").status_code == 401
     r = login()
     assert r.status_code == 200 and r.json()["loginId"] == "guest01"
-    assert client.get("/members/me").json()["role"] == "USER"
+    assert client.get("/api/members/me").json()["role"] == "USER"
 
-    assert client.post("/members/logout").status_code == 204
+    assert client.post("/api/members/logout").status_code == 204
     client.cookies.clear()  # TestClient는 삭제 쿠키를 그대로 들고 있어서 직접 비운다
-    assert client.get("/members/me").status_code == 401
+    assert client.get("/api/members/me").status_code == 401
 
 
 def test_password_is_salted_hash_not_plain():
@@ -92,7 +80,7 @@ def test_signup_rules():
     assert signup("ab").json()["detail"]["code"] == "INVALID_LOGIN_ID"
     assert signup("short_pw", password="1234567").status_code == 422
     assert signup("bad_mail", email="not-mail").json()["detail"]["code"] == "INVALID_EMAIL"
-    r = client.post("/members/signup", json={"loginId": "sneaky", "password": "password123", "name": "x", "role": "ADMIN"})
+    r = client.post("/api/members/signup", json={"loginId": "sneaky", "password": "password123", "name": "x", "role": "ADMIN"})
     assert r.json()["role"] == "USER"   # 가입으로 관리자가 될 수 없다
 
 
@@ -101,14 +89,14 @@ def test_wrong_password_and_forged_cookie():
     assert login(password="wrong-pass").status_code == 401
     assert login("nobody").json()["detail"]["message"] == "아이디 또는 비밀번호가 맞지 않습니다."
     client.cookies.set(m.SESSION_COOKIE, "1.9999999999.forged")
-    assert client.get("/members/me").status_code == 401
+    assert client.get("/api/members/me").status_code == 401
 
 
 def test_admin_only_dependency():
     signup()
     login()
     assert client.get("/test-admin-only").status_code == 403
-    conn = m.connect()
+    conn = connect()
     with conn.cursor() as cur:
         cur.execute("UPDATE member SET role = 'ADMIN' WHERE login_id = 'guest01'")
     conn.commit()
@@ -117,7 +105,7 @@ def test_admin_only_dependency():
 
 
 def run_sql(sql, params=()):
-    conn = m.connect()
+    conn = connect()
     with conn.cursor() as cur:
         cur.execute(sql, params)
     conn.commit()
@@ -137,25 +125,25 @@ def test_update_profile():
     signup(email="a@example.com")
     signup("other1", email="b@example.com")
     login()
-    r = client.put("/members/me", json={"name": "새이름", "phone": "010-1111-2222", "email": "new@example.com"})
+    r = client.put("/api/members/me", json={"name": "새이름", "phone": "010-1111-2222", "email": "new@example.com"})
     assert r.status_code == 200 and r.json()["name"] == "새이름"
-    assert client.get("/members/me").json()["email"] == "new@example.com"
-    r = client.put("/members/me", json={"name": "새이름", "email": "b@example.com"})
+    assert client.get("/api/members/me").json()["email"] == "new@example.com"
+    r = client.put("/api/members/me", json={"name": "새이름", "email": "b@example.com"})
     assert r.json()["detail"]["code"] == "DUPLICATE_EMAIL"
-    assert client.put("/members/me", json={"name": "   "}).status_code == 400
+    assert client.put("/api/members/me", json={"name": "   "}).status_code == 400
 
 
 def test_change_password_logs_out_other_devices():
     signup()
     login()
     old_cookie = client.cookies.get(m.SESSION_COOKIE)
-    r = client.put("/members/me/password", json={"currentPassword": "wrong-pass", "newPassword": "newpass123"})
+    r = client.put("/api/members/me/password", json={"currentPassword": "wrong-pass", "newPassword": "newpass123"})
     assert r.json()["detail"]["code"] == "WRONG_PASSWORD"
-    r = client.put("/members/me/password", json={"currentPassword": "password123", "newPassword": "newpass123"})
+    r = client.put("/api/members/me/password", json={"currentPassword": "password123", "newPassword": "newpass123"})
     assert r.status_code == 204
-    assert client.get("/members/me").status_code == 200    # 지금 기기는 새 쿠키로 계속 로그인
+    assert client.get("/api/members/me").status_code == 200    # 지금 기기는 새 쿠키로 계속 로그인
     client.cookies.set(m.SESSION_COOKIE, old_cookie)
-    assert client.get("/members/me").status_code == 401    # 예전 쿠키(다른 기기)는 끊김
+    assert client.get("/api/members/me").status_code == 401    # 예전 쿠키(다른 기기)는 끊김
     client.cookies.clear()
     assert login(password="password123").status_code == 401
     assert login(password="newpass123").status_code == 200
@@ -164,20 +152,20 @@ def test_change_password_logs_out_other_devices():
 def test_withdraw_keeps_reservation_rows():
     signup(email="a@example.com", phone="010-1234-5678")
     login()
-    me = client.get("/members/me").json()
+    me = client.get("/api/members/me").json()
     run_sql("INSERT INTO room (room_name, room_type, max_guest, price) VALUES ('101호', 'STANDARD', 2, 80000)")
     run_sql("INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date, guest_count, total_price, status)"
             " VALUES (%s, 1, CURDATE() + INTERVAL 5 DAY, CURDATE() + INTERVAL 6 DAY, 1, 80000, 'PENDING')",
             (me["memberId"],))
-    r = client.post("/members/me/withdraw", json={"password": "password123"})
+    r = client.post("/api/members/me/withdraw", json={"password": "password123"})
     assert r.json()["detail"]["code"] == "HAS_RESERVATION"   # 진행 중인 예약이 있으면 불가
 
     run_sql("UPDATE reservation SET status = 'CANCELED'")
-    assert client.post("/members/me/withdraw", json={"password": "wrong-pass"}).status_code == 400
-    assert client.post("/members/me/withdraw", json={"password": "password123"}).status_code == 204
-    assert client.get("/members/me").status_code == 401
+    assert client.post("/api/members/me/withdraw", json={"password": "wrong-pass"}).status_code == 400
+    assert client.post("/api/members/me/withdraw", json={"password": "password123"}).status_code == 204
+    assert client.get("/api/members/me").status_code == 401
     assert login().status_code == 401
-    conn = m.connect()
+    conn = connect()
     with conn.cursor() as cur:
         cur.execute("SELECT login_id, name, phone, email, password FROM member")
         row = cur.fetchone()
@@ -193,7 +181,7 @@ def test_withdraw_keeps_reservation_rows():
 def test_password_reset_with_email():
     signup(email="a@example.com")
     signup("no_mail")
-    reset = lambda **kw: client.post("/members/password-reset",
+    reset = lambda **kw: client.post("/api/members/password-reset",
                                      json={"loginId": "guest01", "email": "a@example.com", "newPassword": "resetpass1", **kw})
     assert reset(email="b@example.com").json()["detail"]["code"] == "NOT_MATCHED"
     assert reset(loginId="no_mail", email="").json()["detail"]["code"] == "NOT_MATCHED"  # 이메일 없는 회원
@@ -202,10 +190,9 @@ def test_password_reset_with_email():
 
 
 def test_admin_cannot_withdraw_and_create_admin():
-    import create_admin
     assert create_admin.create_admin("boss01", "관리자", "adminpass1") == "created"
     assert login("boss01", "adminpass1").json()["role"] == "ADMIN"
-    assert client.post("/members/me/withdraw", json={"password": "adminpass1"}).json()["detail"]["code"] == \
+    assert client.post("/api/members/me/withdraw", json={"password": "adminpass1"}).json()["detail"]["code"] == \
         "ADMIN_CANNOT_WITHDRAW"
     signup("guest02")
     assert create_admin.create_admin("guest02", "무시됨", "promoted1") == "promoted"

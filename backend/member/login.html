@@ -47,7 +47,7 @@
     if (!loginId.value.trim() || !password.value) { msg.className = "msg"; msg.textContent = "아이디와 비밀번호를 입력해 주세요."; return; }
     submit.disabled = true;
     try {
-      const res = await fetch("/members/login", {
+      const res = await fetch("/api/members/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ loginId: loginId.value.trim(), password: password.value }),

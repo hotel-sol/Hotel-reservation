@@ -12,7 +12,7 @@
  */
 (() => {
   // 회원 기능(backend/member, 자체 회원가입)의 주소. /members/me는 로그인 상태면 200 {memberId, loginId, name, role}, 아니면 401.
-  const ME_URL = "/members/me";
+  const ME_URL = "/api/members/me";
   const LOGIN_URL = "/login";
   const SIGNUP_URL = "/signup";
   const MYPAGE_URL = "/mypage";

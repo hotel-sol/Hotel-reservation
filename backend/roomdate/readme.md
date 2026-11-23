@@ -1,8 +1,8 @@
 # roomdate — 예약 일자(휴무일) 관리
 
-담당 테이블 `closed_date`, 화면 ADM-002(관리자 예약 일자 관리). FastAPI `APIRouter`라서 메인 앱에 `app.include_router(roomdate.router)` 한 줄로 붙습니다.
+담당 테이블 `closed_date`, 화면 ADM-002(관리자 예약 일자 관리). `router`(API)와 `pages`(임시 HTML 화면)를 `backend/main.py`가 자동으로 붙입니다.
 
-## API
+## API (실제 주소는 앞에 `/api`, 예: `/api/admin/closed-dates`)
 | 메서드 · 경로 | 설명 | 오류 |
 |---|---|---|
 | `GET /admin/closed-dates?month=2026-12[&roomId=1]` | 그달 휴무일 + 날짜별 예약 수(대기 + 승인) + 객실 목록(① 선택용) | — |
@@ -18,24 +18,14 @@
 - 지난 날짜는 누를 수 없음. 전체 객실 보기에서는 호텔 전체 휴무만 달력에 표시하고 방 휴무는 ④ 목록에만 보임.
 
 ## 실행
-```
-pip install -r requirements.txt
-python init_db.py                 # 개발용 DB(hotel)를 지우고 다시 만듦. 공용 DB에 쓰지 말 것
-# 로그인할 관리자 계정: ADMIN_PASSWORD(팀 공용 비밀번호, 팀 채팅으로 받음)를 넣고 init_db를 실행하면 admin01이 생김
-#   PowerShell: $env:ADMIN_PASSWORD="..."; python init_db.py
-#   (시드의 다른 계정은 비밀번호가 가짜라 로그인 불가)
-uvicorn roomdate:app --reload     # http://127.0.0.1:8000/login → 예약 일자 관리. 로그인 · 상단 메뉴 · 다른 메뉴 뼈대 페이지까지 함께 뜸
-python -m pytest -q               # hotel_test DB를 새로 만들어 테스트
-```
-접속값은 환경변수 `DB_HOST`, `DB_PORT`(기본 3306), `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `SESSION_SECRET`.
-DB 구조는 팀 DDL `docs/hotel_reservation_ddl.sql`을 그대로 씁니다(복사본 없음). `dev_seed.sql`은 화면설계서 12월 예시와 같은 가상 데이터입니다(예약만 넣고 휴무일은 비워 둠. 12/31은 위 시나리오로 직접 지정).
+실행 · 테스트 · 접속값은 [backend/readme.md](../readme.md)를 따릅니다(`uvicorn main:app` → http://127.0.0.1:8000/login → 예약 일자 관리, `python -m pytest`).
+DB 구조는 팀 DDL `docs/hotel_reservation_ddl.sql`을 그대로 씁니다(복사본 없음). `db/dev_seed.sql`은 화면설계서 12월 예시와 같은 가상 데이터입니다(예약만 넣고 휴무일은 비워 둠. 12/31은 위 시나리오로 직접 지정).
 
 ## 정한 규칙 (기획문서에 없어서 정함, 확인 부탁)
 - "그날 예약" = 그날 밤 묵는 예약(체크인 ≤ 그날 < 체크아웃). 체크아웃 날은 예약이 있어도 휴무 지정 가능.
 - 호텔 전체 휴무: 어느 방이든 그날 예약이 있으면 거부. 방 휴무: 그 방 예약만 봄.
 - 호텔 전체 휴무인 날에 방 휴무 추가 → `ALREADY_CLOSED`. 방 휴무가 있는 날에 호텔 전체 휴무는 가능.
 - 오늘(한국 시간)부터 지정 가능. 사유는 필수(최대 200자).
-- DB 연결은 임시로 이 파일 안에 있음. 공통 `db/connect.py`가 채워지면 그쪽으로 바꿈.
 
 ## DDL 참고
 `UNIQUE (room_id, closed_date)`는 `room_id`가 NULL(호텔 전체 휴무)이면 같은 날 중복을 막지 못합니다(MySQL · MariaDB 공통, 직접 확인). 그래서 API에서 먼저 검사합니다.

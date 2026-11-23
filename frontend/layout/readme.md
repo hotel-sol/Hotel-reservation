@@ -26,7 +26,7 @@ app.mount("/layout", StaticFiles(directory="frontend/layout"), name="layout")
 ```
 
 ## 회원 기능과의 연결 (자체 회원가입, `backend/member`)
-머리줄은 페이지를 열 때 **`GET /members/me`** 를 한 번 부릅니다.
+머리줄은 페이지를 열 때 **`GET /api/members/me`** 를 한 번 부릅니다.
 - 로그인 상태: `200 {"memberId": 1, "loginId": "admin", "name": "관리자", "role": "ADMIN"}` (`role`은 `member.role` 그대로)
 - 로그인 안 함: `401`
 - 로그인 정보는 세션 쿠키로 갑니다(같은 주소라 `fetch`가 자동으로 보냄).
@@ -37,7 +37,7 @@ app.mount("/layout", StaticFiles(directory="frontend/layout"), name="layout")
 cd frontend/layout
 python -m http.server 8020      # http://127.0.0.1:8020/preview.html
 ```
-위쪽 버튼으로 관리자 / 회원 / 로그인 안 함을 바꿔 볼 수 있습니다(미리보기만 `/members/me` 응답을 흉내 냄).
+위쪽 버튼으로 관리자 / 회원 / 로그인 안 함을 바꿔 볼 수 있습니다(미리보기만 `/api/members/me` 응답을 흉내 냄).
 
 ## 팀 확인 필요
 - **화면 주소 규칙**: API 주소 뒤에 `/page`(`/admin/closed-dates/page`는 이미 이렇게 동작). 객실 관리 `/admin/rooms/page`, 예약 관리 `/admin/reservations/page`, 객실 추천 `/rooms/page`, 내 예약 `/reservations/page`. 바꾸려면 `layout.js`의 `MENUS`만 고칩니다.

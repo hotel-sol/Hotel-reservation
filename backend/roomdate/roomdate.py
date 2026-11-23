@@ -1,66 +1,28 @@
 """예약 일자(휴무일) 관리 API — 화면 ADM-002, 테이블 closed_date
 
+API(router, 실제 주소는 앞에 /api):
 GET    /admin/closed-dates?month=YYYY-MM[&roomId=]  달의 휴무일 + 날짜별 예약 수
 POST   /admin/closed-dates                          휴무일 지정
 DELETE /admin/closed-dates/{closedDateId}           휴무 해제
-GET    /admin/closed-dates/page                     관리자 화면(roomdate.html)
 
-관리자 확인은 회원 기능(backend/member)의 로그인 세션으로 한다: Depends(require_admin).
+임시 HTML 화면(pages): GET /admin/closed-dates/page → roomdate.html
 
-다른 앱에 붙일 때: app.include_router(roomdate.router)
-혼자 실행: uvicorn roomdate:app --reload  (backend/roomdate 폴더에서, 로그인 · 상단 메뉴 · 뼈대 페이지까지 함께 뜸)
+관리자 확인은 회원 기능의 로그인 세션으로 한다: Depends(require_admin).
 """
 import calendar
-import os
-import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from pathlib import Path
 
 import pymysql
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from common.common import DUPLICATE_KEY, LIVE_STATUSES, fail, today_kst
+from db.connect import get_db
+from member.member import require_admin
+
 HERE = Path(__file__).parent
-ROOT = HERE.parent.parent
-# ponytail: 팀 메인 앱(패키지 구조)이 생기기 전까지 옆 폴더 모듈을 경로로 불러온다.
-sys.path[:0] = [str(HERE.parent / "member"), str(ROOT / "frontend" / "placeholder")]
-from member import require_admin  # noqa: E402
-from member import router as member_router  # noqa: E402
-
-KST = timezone(timedelta(hours=9))
-LIVE_STATUSES = ("PENDING", "APPROVED")  # 객실을 잡고 있는 예약 (대기 + 승인)
-DUPLICATE_KEY = 1062
-
-
-def connect(database: str | None = None):
-    # ponytail: 공통 backend/db/connect.py가 채워지면 그쪽으로 바꾼다.
-    return pymysql.connect(
-        host=os.getenv("DB_HOST", "127.0.0.1"),
-        port=int(os.getenv("DB_PORT", "3306")),
-        user=os.getenv("DB_USER", "root"),
-        password=os.getenv("DB_PASSWORD", ""),
-        database=database if database is not None else os.getenv("DB_NAME", "hotel"),
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor,
-    )
-
-
-def get_db():
-    conn = connect()
-    try:
-        yield conn
-    finally:
-        conn.close()
-
-
-def fail(status: int, code: str, message: str, **extra):
-    raise HTTPException(status, detail={"code": code, "message": message, **extra})
-
-
-def today_kst() -> date:
-    return datetime.now(KST).date()
 
 
 def count_live_reservations(cur, day: date, room_id: int | None) -> int:
@@ -137,12 +99,6 @@ def list_closed_dates(
             "closedDates": closed, "reservationCounts": counts}
 
 
-@router.get("/page", include_in_schema=False)
-def admin_page():
-    """ADM-002 화면 본문(①~④). 상단 메뉴(객실 관리 · 예약 관리 · 로그아웃)는 공통 레이아웃 담당이 만든다."""
-    return FileResponse(HERE / "roomdate.html")
-
-
 class ClosedDateIn(BaseModel):
     closed_date: date = Field(alias="closedDate")
     room_id: int | None = Field(default=None, alias="roomId")
@@ -208,12 +164,11 @@ def delete_closed_date(closed_date_id: int, _admin: dict = Depends(require_admin
         fail(404, "NOT_FOUND", "없는 휴무일입니다.")
 
 
-# 혼자 실행용 앱: 이 화면 + 로그인(회원) + 상단 메뉴 + 나머지 메뉴의 뼈대 페이지.
-# 팀 메인 앱에서는 router만 붙인다.
-app = FastAPI(title="태양의 호텔 · 예약 일자 관리")
-app.include_router(router)
-app.include_router(member_router)
-app.mount("/layout", StaticFiles(directory=ROOT / "frontend" / "layout"), name="layout")
-from placeholder import add_placeholders  # noqa: E402
+# ---------- 임시 HTML 화면 (Next.js 화면이 생기면 지운다) ----------
+pages = APIRouter(include_in_schema=False)
 
-add_placeholders(app)
+
+@pages.get("/admin/closed-dates/page")
+def admin_page():
+    """ADM-002 화면 본문(①~④). 상단 메뉴는 frontend/layout."""
+    return FileResponse(HERE / "roomdate.html")

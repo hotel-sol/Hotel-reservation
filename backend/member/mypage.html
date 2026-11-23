@@ -70,7 +70,7 @@
 </main>
 <script>
   async function call(method, url, body) {
-    const res = await fetch(url, {
+    const res = await fetch("/api" + url, {
       method,
       headers: body ? { "Content-Type": "application/json" } : {},
       body: body ? JSON.stringify(body) : undefined,

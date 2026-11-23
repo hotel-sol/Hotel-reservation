@@ -17,7 +17,7 @@
   const AS = new URLSearchParams(location.search).get("as") || "ADMIN";
   const realFetch = window.fetch;
   window.fetch = (url, opts) => {
-    if (url !== "/members/me") return realFetch(url, opts);
+    if (url !== "/api/members/me") return realFetch(url, opts);
     if (AS === "GUEST") return Promise.resolve(new Response("", { status: 401 }));
     return Promise.resolve(Response.json({ memberId: 1, name: "미리보기", role: AS }));
   };

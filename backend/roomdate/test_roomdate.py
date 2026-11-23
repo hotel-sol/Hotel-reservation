@@ -1,32 +1,32 @@
-"""휴무일 API 통과 테스트. 실제 MariaDB의 hotel_test DB를 매번 새로 만든다.
+"""휴무일 API 통과 테스트. 로컬 MariaDB의 hotel_test DB를 매번 새로 만든다.
 
-실행: DB_PORT=3307 python -m pytest -q  (backend/roomdate 폴더에서)
+실행: python -m pytest  (backend 폴더에서)
 """
-import os
-
-os.environ["DB_NAME"] = "hotel_test"  # roomdate import 전에
 
 from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 
-import roomdate as app_module
-from roomdate import connect
-from init_db import init_db
-from member import SESSION_COOKIE, make_session
+from common.common import today_kst
+from db.connect import connect
+from db.init_db import init_db
+from main import app
+from member.member import SESSION_COOKIE, make_session
 
 # 시드(dev_seed.sql)의 1번 = ADMIN, 2번 = USER. 로그인 화면 대신 회원 기능과 같은 방식으로 세션 쿠키를 만든다.
 SEED_PASSWORD = "not-a-real-hash"
 ADMIN = {"Cookie": f"{SESSION_COOKIE}={make_session(1, SEED_PASSWORD)}"}
 GUEST = {"Cookie": f"{SESSION_COOKIE}={make_session(2, SEED_PASSWORD)}"}
-client = TestClient(app_module.app)
-TODAY = app_module.today_kst()
+API = "/api/admin/closed-dates"
+client = TestClient(app)
+TODAY = today_kst()
 D1 = TODAY + timedelta(days=400)  # 시드(2026-12)와 겹치지 않는 미래 날짜
 
 
 @pytest.fixture(autouse=True)
-def fresh_db():
+def fresh_db(monkeypatch):
+    monkeypatch.setenv("DB_NAME", "hotel_test")  # 이 파일의 테스트는 이 DB를 쓴다
     init_db("hotel_test")
 
 
@@ -44,7 +44,7 @@ def add_reservation(room_id, check_in, nights, status="PENDING"):
 
 def post(day, room_id=None, reason="시설 점검", headers=ADMIN):
     body = {"closedDate": day.isoformat(), "roomId": room_id, "reason": reason}
-    return client.post("/admin/closed-dates", json=body, headers=headers)
+    return client.post(API, json=body, headers=headers)
 
 
 def test_hotel_wide_close_then_list_then_release():
@@ -54,11 +54,11 @@ def test_hotel_wide_close_then_list_then_release():
     assert r.json()["roomId"] is None
 
     month = D1.strftime("%Y-%m")
-    listed = client.get(f"/admin/closed-dates?month={month}", headers=ADMIN).json()
+    listed = client.get(f"{API}?month={month}", headers=ADMIN).json()
     assert [c["closedDateId"] for c in listed["closedDates"]] == [cid]
 
-    assert client.delete(f"/admin/closed-dates/{cid}", headers=ADMIN).status_code == 204
-    assert client.delete(f"/admin/closed-dates/{cid}", headers=ADMIN).status_code == 404
+    assert client.delete(f"{API}/{cid}", headers=ADMIN).status_code == 204
+    assert client.delete(f"{API}/{cid}", headers=ADMIN).status_code == 404
 
 
 def test_reservation_blocks_closing_but_checkout_day_does_not():
@@ -98,7 +98,7 @@ def test_input_and_permission_errors():
 
 def test_screen_scenario_close_dec_31():
     """화면설계서 시나리오: 12월 달력 → 31일 클릭(예약 0건) → 사유 입력 후 지정 → ④ 목록에 생김."""
-    month = lambda q="": client.get(f"/admin/closed-dates?month=2026-12{q}", headers=ADMIN).json()
+    month = lambda q="": client.get(f"{API}?month=2026-12{q}", headers=ADMIN).json()
 
     before = month()
     assert before["reservationCounts"] == {
