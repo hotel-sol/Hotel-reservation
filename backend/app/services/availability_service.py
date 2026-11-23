@@ -1,4 +1,4 @@
-"""예약 달력 (RSV-001) — 한 달 동안 날짜별로 예약할 수 있는지 계산한다.
+"""예약 달력 (RSV-001) · 예약 막힘 확인 (Step 2 4A).
 
 예약이 차지하는 날: 체크인 <= 날짜 < 체크아웃 (체크아웃 날은 비어 있음)
 막히는 이유: PAST(지난 날짜) > CLOSED(휴무일) > BOOKED(예약된 날) 순서로 하나만 표시
@@ -15,6 +15,7 @@ from app.models.reservation import LIVE_STATUSES
 from app.schemas.reservation import CalendarDay
 
 PAST, CLOSED, BOOKED = "PAST", "CLOSED", "BOOKED"
+DATE_CLOSED, ROOM_CLOSED = "DATE_CLOSED", "ROOM_CLOSED"
 
 
 def month_range(year: int, month: int) -> tuple[date, date]:
@@ -70,3 +71,33 @@ def room_calendar(db: Session, room_id: int, first: date, last: date) -> list[Ca
         days.append(CalendarDay(day=d, available=reason is None, reason=reason))
         d += timedelta(days=1)
     return days
+
+
+def block_reason(db: Session, room_id: int, check_in: date, check_out: date) -> str | None:
+    """예약하려는 기간 [check_in, check_out)이 막힌 이유. 막히지 않았으면 None.
+
+    DATE_CLOSED: 호텔 전체 휴무 / ROOM_CLOSED: 이 객실만 판매 중지 / BOOKED: 다른 예약과 겹침
+    """
+    in_range = (ClosedDate.closed_date >= check_in, ClosedDate.closed_date < check_out)
+
+    hotel_closed = select(ClosedDate.closed_date).where(ClosedDate.room_id.is_(None), *in_range).limit(1)
+    if db.scalar(hotel_closed) is not None:
+        return DATE_CLOSED
+
+    room_closed = select(ClosedDate.closed_date).where(ClosedDate.room_id == room_id, *in_range).limit(1)
+    if db.scalar(room_closed) is not None:
+        return ROOM_CLOSED
+
+    overlap = (
+        select(Reservation.reservation_id)
+        .where(
+            Reservation.room_id == room_id,
+            Reservation.status.in_(LIVE_STATUSES),
+            Reservation.check_in_date < check_out,
+            Reservation.check_out_date > check_in,
+        )
+        .limit(1)
+    )
+    if db.scalar(overlap) is not None:
+        return BOOKED
+    return None

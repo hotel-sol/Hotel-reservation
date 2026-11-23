@@ -4,13 +4,20 @@ from sqlalchemy import select
 from fastapi import APIRouter
 
 from app.api.deps import DB, CurrentMember
-from app.core.exceptions import fail
 from app.core.dates import today_kst
+from app.core.exceptions import fail
 from app.models import Reservation, Room
 from app.schemas.reservation import ReservationCreate, ReservationOut
-from app.services.room_service import available_room_filter
+from app.services.availability_service import block_reason
 
 router = APIRouter(prefix="/reservations", tags=["reservations"])
+
+# 막힌 이유 → (상태코드, 오류 코드, 화면에 띄울 문장)
+BLOCK_ERRORS = {
+    "DATE_CLOSED": (409, "DATE_CLOSED", "선택한 기간에 호텔 휴무일이 있어 예약할 수 없습니다."),
+    "ROOM_CLOSED": (409, "ROOM_CLOSED", "이 객실은 선택한 기간에 판매하지 않습니다."),
+    "BOOKED": (409, "ROOM_NOT_AVAILABLE", "선택한 날짜에 이미 예약이 있습니다."),
+}
 
 
 def to_out(r: Reservation, room_name: str | None = None) -> ReservationOut:
@@ -21,19 +28,18 @@ def to_out(r: Reservation, room_name: str | None = None) -> ReservationOut:
 
 @router.post("", response_model=ReservationOut, status_code=201)
 def create_reservation(body: ReservationCreate, member: CurrentMember, db: DB):
-    room = db.get(Room, body.room_id)
+    # 객실 행을 잠가서, 같은 방에 동시에 들어온 예약은 먼저 온 쪽이 끝날 때까지 기다리게 한다.
+    room = db.get(Room, body.room_id, with_for_update=True)
     if room is None or room.is_active != "Y":
         fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
     if body.guest_count > room.max_guest:
         fail(400, "TOO_MANY_GUESTS", f"최대 {room.max_guest}명까지 예약할 수 있습니다.")
     if body.check_in_date < today_kst():
         fail(400, "PAST_DATE", "지난 날짜는 예약할 수 없습니다.")
-    # TODO: 동시 예약 경합 시 잠금(UPDLOCK) 처리    
-    available = db.scalar(
-        select(Room.room_id).where(Room.room_id == room.room_id, available_room_filter(body.check_in_date, body.check_out_date))
-    )
-    if available is None:
-        fail(409, "ROOM_NOT_AVAILABLE", "선택한 날짜에 예약할 수 없는 객실입니다.")
+
+    reason = block_reason(db, room.room_id, body.check_in_date, body.check_out_date)
+    if reason is not None:
+        fail(*BLOCK_ERRORS[reason])
 
     nights = (body.check_out_date - body.check_in_date).days
     reservation = Reservation(
