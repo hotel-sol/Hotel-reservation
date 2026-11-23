@@ -8,7 +8,7 @@ export const instant = false;
 export default function AdminClosedDatesPage() {
   return (
     <>
-      <PageTitle code="ADM-002" title="휴무일 관리" desc="전체 객실 = 호텔 전체 휴무, 특정 객실 = 그 방만 휴무" />
+      <PageTitle code="ADM-002" title="예약 일자 관리" desc="전체 객실 = 호텔 전체 휴무, 특정 객실 = 그 방만 휴무. 예약이 있는 날은 지정할 수 없어요." />
       <Suspense fallback={<p className="text-sm text-slate-500">불러오는 중…</p>}>
         <ClosedDateManager />
       </Suspense>

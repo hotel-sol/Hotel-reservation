@@ -23,7 +23,7 @@ src/
 │   ├── reservation/new/              RSV-001 객실 예약  (?roomId=&checkIn=&checkOut=&guests=)
 │   ├── reservation/[reservationId]/complete/   RSV-002 예약 완료
 │   ├── reservation/list/             내 예약 조회
-│   ├── login/ · signup/ · mypage/
+│   ├── login/ · signup/ · mypage/ · password-reset/
 │   └── admin/                        관리자 (AdminGuard 로 화면 보호, 실제 권한은 백엔드)
 │       ├── rooms/                    ADM-001
 │       ├── closed-dates/             ADM-002
