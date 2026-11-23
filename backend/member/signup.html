@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>회원가입</title>
+<style>
+  body { margin: 0; font-family: system-ui, "Malgun Gothic", sans-serif; color: #1f2937; background: #fff; }
+  main { max-width: 400px; margin: 48px auto; padding: 0 16px; }
+  h1 { font-size: 22px; margin: 0 0 20px; }
+  label { display: block; font-size: 13px; color: #4b5563; margin: 14px 0 6px; }
+  label small { color: #9ca3af; }
+  input { width: 100%; box-sizing: border-box; font: inherit; padding: 11px 12px; border: 1px solid #d1d5db; border-radius: 6px; }
+  .hint { font-size: 12px; color: #9ca3af; margin-top: 4px; }
+  button { width: 100%; margin-top: 24px; padding: 12px; border: 0; border-radius: 6px; background: #1f2937; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: .5; }
+  .msg { min-height: 1.2em; font-size: 13px; color: #dc2626; margin-top: 12px; }
+  .alt { margin-top: 20px; font-size: 14px; text-align: center; color: #6b7280; }
+  .alt a { color: #1f2937; font-weight: 700; }
+</style>
+</head>
+<body>
+<header data-hotel-header></header>
+<main>
+  <h1>회원가입</h1>
+  <form id="form" novalidate>
+    <label for="loginId">아이디 *</label>
+    <input id="loginId" autocomplete="username" maxlength="50">
+    <div class="hint">영문 · 숫자 · _ 4~50자</div>
+    <label for="password">비밀번호 *</label>
+    <input id="password" type="password" autocomplete="new-password" maxlength="100">
+    <div class="hint">8자 이상</div>
+    <label for="password2">비밀번호 확인 *</label>
+    <input id="password2" type="password" autocomplete="new-password" maxlength="100">
+    <label for="memberName">이름 *</label>
+    <input id="memberName" autocomplete="name" maxlength="50">
+    <label for="phone">전화번호 <small>(선택)</small></label>
+    <input id="phone" type="tel" autocomplete="tel" maxlength="20" placeholder="010-0000-0000">
+    <label for="email">이메일 <small>(선택)</small></label>
+    <input id="email" type="email" autocomplete="email" maxlength="100">
+    <button id="submit">가입하기</button>
+    <div class="msg" id="msg" role="alert"></div>
+  </form>
+  <p class="alt">이미 회원이세요? <a href="/login">로그인</a></p>
+</main>
+<script>
+  // 화면에서 먼저 걸러 주는 것일 뿐, 같은 검사를 서버(POST /members/signup)가 다시 한다.
+  function check() {
+    if (!/^[A-Za-z0-9_]{4,50}$/.test(loginId.value.trim())) return "아이디는 영문 · 숫자 · _ 4~50자입니다.";
+    if (password.value.length < 8) return "비밀번호는 8자 이상입니다.";
+    if (password.value !== password2.value) return "비밀번호 확인이 다릅니다.";
+    if (!memberName.value.trim()) return "이름을 입력해 주세요.";
+    return "";
+  }
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const problem = check();
+    if (problem) { msg.textContent = problem; return; }
+    submit.disabled = true;
+    try {
+      const res = await fetch("/members/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          loginId: loginId.value.trim(), password: password.value, name: memberName.value.trim(),
+          phone: phone.value.trim() || null, email: email.value.trim() || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail?.message || (res.status === 422 ? "입력값을 확인해 주세요." : "가입하지 못했습니다."));
+      location.href = "/login?joined=1";
+    } catch (err) {
+      msg.textContent = err.message;
+      submit.disabled = false;
+    }
+  };
+</script>
+<script src="/layout/layout.js"></script>
+</body>
+</html>

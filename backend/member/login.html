@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로그인</title>
+<style>
+  body { margin: 0; font-family: system-ui, "Malgun Gothic", sans-serif; color: #1f2937; background: #fff; }
+  main { max-width: 360px; margin: 56px auto; padding: 0 16px; }
+  h1 { font-size: 22px; margin: 0 0 24px; }
+  label { display: block; font-size: 13px; color: #4b5563; margin: 14px 0 6px; }
+  input { width: 100%; box-sizing: border-box; font: inherit; padding: 11px 12px; border: 1px solid #d1d5db; border-radius: 6px; }
+  button { width: 100%; margin-top: 22px; padding: 12px; border: 0; border-radius: 6px; background: #1f2937; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: .5; }
+  .msg { min-height: 1.2em; font-size: 13px; color: #dc2626; margin-top: 12px; }
+  .msg.ok { color: #15803d; }
+  .alt { margin-top: 20px; font-size: 14px; text-align: center; color: #6b7280; }
+  .alt a { color: #1f2937; font-weight: 700; }
+</style>
+</head>
+<body>
+<header data-hotel-header></header>
+<main>
+  <h1>로그인</h1>
+  <form id="form" novalidate>
+    <label for="loginId">아이디</label>
+    <input id="loginId" autocomplete="username" required>
+    <label for="password">비밀번호</label>
+    <input id="password" type="password" autocomplete="current-password" required>
+    <button id="submit">로그인</button>
+    <div class="msg" id="msg" role="alert"></div>
+  </form>
+  <p class="alt">아직 회원이 아니세요? <a href="/signup">회원가입</a></p>
+  <p class="alt"><a href="/password-reset">비밀번호를 잊으셨나요?</a></p>
+</main>
+<script>
+  const params = new URLSearchParams(location.search);
+  if (params.has("joined")) { msg.textContent = "가입이 끝났습니다. 로그인해 주세요."; msg.className = "msg ok"; }
+  if (params.has("reset")) { msg.textContent = "비밀번호를 바꿨습니다. 새 비밀번호로 로그인해 주세요."; msg.className = "msg ok"; }
+
+  // 로그인 뒤 돌아갈 곳: 같은 사이트 주소만 허용(다른 사이트로 튕기기 방지).
+  const next = params.get("next");
+  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    if (!loginId.value.trim() || !password.value) { msg.className = "msg"; msg.textContent = "아이디와 비밀번호를 입력해 주세요."; return; }
+    submit.disabled = true;
+    try {
+      const res = await fetch("/members/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ loginId: loginId.value.trim(), password: password.value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail?.message || "로그인하지 못했습니다.");
+      location.href = safeNext || (data.role === "ADMIN" ? "/admin/rooms/page" : "/rooms/page");
+    } catch (err) {
+      msg.className = "msg";
+      msg.textContent = err.message;
+      submit.disabled = false;
+    }
+  };
+</script>
+<script src="/layout/layout.js"></script>
+</body>
+</html>
