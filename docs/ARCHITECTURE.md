@@ -182,9 +182,9 @@ sequenceDiagram
 
 | 파트 | 화면 (Next.js) | API (`/api` 생략) | 상태 |
 |---|---|---|---|
-| 1 회원 · 객실 추천 | `/login` `/signup` `/mypage` `/rooms` | `members/signup · login · logout · me`, `PUT members/me`, `PUT members/me/password`, `POST members/me/withdraw`, `POST members/password-reset`, `GET rooms/recommend`, `POST rooms/{id}/view` | 구현. 마이페이지 화면의 수정 · 탈퇴는 화면 TODO |
+| 1 회원 · 객실 추천 | `/login` `/signup` `/mypage` `/password-reset` `/rooms` | `members/signup · login · logout · me`, `PUT members/me`, `PUT members/me/password`, `POST members/me/withdraw`, `POST members/password-reset`, `GET rooms/recommend`, `POST rooms/{id}/view` | 구현 (마이페이지 정보 수정 · 비밀번호 변경 · 탈퇴, 비밀번호 찾기 화면 포함) |
 | 2 객실 관리 (ADM-001) | `/admin/rooms` | `GET POST admin/rooms`, `PUT admin/rooms/{id}`, `PATCH admin/rooms/{id}/status` | 구현. 사진 `POST files`는 501(TODO) |
-| 3 예약 일자 관리 (ADM-002) | `/admin/closed-dates` | `GET admin/closed-dates`, `GET admin/closed-dates/reservation-counts`, `POST`, `DELETE admin/closed-dates/{id}` | API 구현 · 테스트. 달력 화면은 TODO |
+| 3 예약 일자 관리 (ADM-002) | `/admin/closed-dates` | `GET admin/closed-dates`, `GET admin/closed-dates/reservation-counts`, `POST`, `DELETE admin/closed-dates/{id}` | 구현 (객실 선택 · 달력 · 지정/해제 · 이번 달 목록) |
 | 4 객실 예약 · 완료 (RSV-001/002) | `/reservation/new` `/reservation/{id}/complete` `/reservation/list` | `POST reservations`, `GET reservations/{id}`, `GET reservations/me`, `GET rooms/{id}` | 구현. 지난 날짜 차단 · `rooms/{id}/available-dates`(501)는 TODO |
 | 5 공통 · 예약 관리 (ADM-003) | `/admin/reservations`, 상단 메뉴 | `GET admin/reservations`, `PATCH admin/reservations/{id}/approve · cancel`, `GET menus` | 구현 |
 
