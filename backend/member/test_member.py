@@ -38,6 +38,7 @@ def fresh_db():
     conn.commit()
     conn.close()
     client.cookies.clear()
+    m._fails.clear()
 
 
 def signup(login_id="guest01", password="password123", **extra):
@@ -115,8 +116,106 @@ def test_admin_only_dependency():
     assert client.get("/test-admin-only").status_code == 200   # 역할 변경이 바로 반영
 
 
+def run_sql(sql, params=()):
+    conn = m.connect()
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+    conn.commit()
+    conn.close()
+
+
+def test_login_locks_after_five_failures():
+    signup()
+    for _ in range(5):
+        assert login(password="wrong-pass").status_code == 401
+    assert login().status_code == 429                      # 맞는 비밀번호여도 잠김
+    m._fails.clear()                                        # 10분 지난 것으로 치고
+    assert login().status_code == 200
+
+
+def test_update_profile():
+    signup(email="a@example.com")
+    signup("other1", email="b@example.com")
+    login()
+    r = client.put("/members/me", json={"name": "새이름", "phone": "010-1111-2222", "email": "new@example.com"})
+    assert r.status_code == 200 and r.json()["name"] == "새이름"
+    assert client.get("/members/me").json()["email"] == "new@example.com"
+    r = client.put("/members/me", json={"name": "새이름", "email": "b@example.com"})
+    assert r.json()["detail"]["code"] == "DUPLICATE_EMAIL"
+    assert client.put("/members/me", json={"name": "   "}).status_code == 400
+
+
+def test_change_password_logs_out_other_devices():
+    signup()
+    login()
+    old_cookie = client.cookies.get(m.SESSION_COOKIE)
+    r = client.put("/members/me/password", json={"currentPassword": "wrong-pass", "newPassword": "newpass123"})
+    assert r.json()["detail"]["code"] == "WRONG_PASSWORD"
+    r = client.put("/members/me/password", json={"currentPassword": "password123", "newPassword": "newpass123"})
+    assert r.status_code == 204
+    assert client.get("/members/me").status_code == 200    # 지금 기기는 새 쿠키로 계속 로그인
+    client.cookies.set(m.SESSION_COOKIE, old_cookie)
+    assert client.get("/members/me").status_code == 401    # 예전 쿠키(다른 기기)는 끊김
+    client.cookies.clear()
+    assert login(password="password123").status_code == 401
+    assert login(password="newpass123").status_code == 200
+
+
+def test_withdraw_keeps_reservation_rows():
+    signup(email="a@example.com", phone="010-1234-5678")
+    login()
+    me = client.get("/members/me").json()
+    run_sql("INSERT INTO room (room_name, room_type, max_guest, price) VALUES ('101호', 'STANDARD', 2, 80000)")
+    run_sql("INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date, guest_count, total_price, status)"
+            " VALUES (%s, 1, CURDATE() + INTERVAL 5 DAY, CURDATE() + INTERVAL 6 DAY, 1, 80000, 'PENDING')",
+            (me["memberId"],))
+    r = client.post("/members/me/withdraw", json={"password": "password123"})
+    assert r.json()["detail"]["code"] == "HAS_RESERVATION"   # 진행 중인 예약이 있으면 불가
+
+    run_sql("UPDATE reservation SET status = 'CANCELED'")
+    assert client.post("/members/me/withdraw", json={"password": "wrong-pass"}).status_code == 400
+    assert client.post("/members/me/withdraw", json={"password": "password123"}).status_code == 204
+    assert client.get("/members/me").status_code == 401
+    assert login().status_code == 401
+    conn = m.connect()
+    with conn.cursor() as cur:
+        cur.execute("SELECT login_id, name, phone, email, password FROM member")
+        row = cur.fetchone()
+        cur.execute("SELECT COUNT(*) AS n FROM reservation")
+        kept = cur.fetchone()["n"]
+    conn.close()
+    assert row == {"login_id": f"withdrawn_{me['memberId']}", "name": "탈퇴회원", "phone": None, "email": None,
+                   "password": "!"}
+    assert kept == 1                                          # 예약 기록은 남는다
+    assert signup().status_code == 201                        # 같은 아이디로 다시 가입 가능
+
+
+def test_password_reset_with_email():
+    signup(email="a@example.com")
+    signup("no_mail")
+    reset = lambda **kw: client.post("/members/password-reset",
+                                     json={"loginId": "guest01", "email": "a@example.com", "newPassword": "resetpass1", **kw})
+    assert reset(email="b@example.com").json()["detail"]["code"] == "NOT_MATCHED"
+    assert reset(loginId="no_mail", email="").json()["detail"]["code"] == "NOT_MATCHED"  # 이메일 없는 회원
+    assert reset(email="A@Example.com ").status_code == 204                             # 대소문자 · 공백 무시
+    assert login(password="resetpass1").status_code == 200
+
+
+def test_admin_cannot_withdraw_and_create_admin():
+    import create_admin
+    assert create_admin.create_admin("boss01", "관리자", "adminpass1") == "created"
+    assert login("boss01", "adminpass1").json()["role"] == "ADMIN"
+    assert client.post("/members/me/withdraw", json={"password": "adminpass1"}).json()["detail"]["code"] == \
+        "ADMIN_CANNOT_WITHDRAW"
+    signup("guest02")
+    assert create_admin.create_admin("guest02", "무시됨", "promoted1") == "promoted"
+    assert login("guest02", "promoted1").json()["role"] == "ADMIN"
+
+
 def test_pages_and_get_logout():
     assert "회원가입" in client.get("/signup").text
     assert "로그인" in client.get("/login").text
+    assert "회원 탈퇴" in client.get("/mypage").text
+    assert "비밀번호 찾기" in client.get("/password-reset").text
     r = client.get("/logout", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/login"
