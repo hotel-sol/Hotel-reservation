@@ -1,0 +1,76 @@
+// 백엔드(app/schemas) 응답과 1:1. JSON 키는 camelCase.
+
+export type Role = "USER" | "ADMIN";
+export type ReservationStatus = "PENDING" | "APPROVED" | "CANCELED";
+export type RoomSort = "recommend" | "popular" | "price";
+
+export interface Page<T> {
+  items: T[];
+  total: number;
+  page: number;
+  size: number;
+}
+
+export interface Member {
+  memberId: number;
+  loginId: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  role: Role;
+}
+
+export interface Room {
+  roomId: number;
+  roomName: string;
+  roomType: string;
+  maxGuest: number;
+  price: number;
+  description: string | null;
+  viewCount: number;
+  isActive: "Y" | "N";
+}
+
+export interface RecommendRoom extends Room {
+  score: number;
+  recentReservations: number;
+  isRecommended: boolean;
+  thumbnailUrl: string | null;
+}
+
+export interface Reservation {
+  reservationId: number;
+  memberId: number;
+  roomId: number;
+  roomName: string | null;
+  memberName: string | null;
+  checkInDate: string; // YYYY-MM-DD
+  checkOutDate: string;
+  guestCount: number;
+  totalPrice: number;
+  status: ReservationStatus;
+  requestMemo: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClosedDate {
+  closedDateId: number;
+  roomId: number | null;
+  closedDate: string;
+  reason: string | null;
+}
+
+export interface MenuItem {
+  menuId: number;
+  parentId: number | null;
+  menuName: string;
+  menuUrl: string | null;
+  role: Role;
+  sortOrder: number;
+  children: MenuItem[];
+}
+
+export interface ApiErrorBody {
+  detail: { code: string; message: string } | { msg: string }[] | string;
+}
