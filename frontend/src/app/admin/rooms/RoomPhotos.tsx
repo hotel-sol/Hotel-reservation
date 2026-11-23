@@ -78,15 +78,21 @@ export default function RoomPhotos({ room, onClose }: { room: Room; onClose: () 
       </ul>
 
       <div className="flex flex-wrap items-center gap-2">
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".jpg,.jpeg,.png,image/jpeg,image/png"
-          multiple
-          disabled={busy || photos.length >= MAX}
-          onChange={(e) => upload(e.target.files)}
-          className="text-sm"
-        />
+        {/* 기본 파일 입력은 스타일 초기화로 글자만 보여서, 숨기고 버튼 모양 label 로 연다 */}
+        <label
+          className={`btn-primary ${busy || photos.length >= MAX ? "pointer-events-none opacity-50" : "cursor-pointer"}`}
+        >
+          + 사진 올리기 (jpg·png, 여러 장 선택 가능)
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+            multiple
+            disabled={busy || photos.length >= MAX}
+            onChange={(e) => upload(e.target.files)}
+            className="hidden"
+          />
+        </label>
         {busy && <span className="text-sm text-slate-500">올리는 중…</span>}
         {photos.length >= MAX && <span className="text-sm text-slate-500">최대 {MAX}장을 모두 올렸습니다. 바꾸려면 먼저 삭제하세요.</span>}
       </div>
