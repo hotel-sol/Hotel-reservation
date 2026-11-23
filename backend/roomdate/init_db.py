@@ -40,8 +40,17 @@ def init_db(db_name: str, seed: bool = True) -> None:
 
 if __name__ == "__main__":
     name = os.getenv("DB_NAME", "hotel")
+    seed = "--no-seed" not in sys.argv
     try:
-        init_db(name, seed="--no-seed" not in sys.argv)
-    except pymysql.MySQLError as e:
+        init_db(name, seed=seed)
+        print(f"'{name}' 생성 완료")
+        # 공용 개발용 관리자: 비밀번호는 저장소에 두지 않고 환경변수로 받는다(팀에 따로 전달).
+        admin_password = os.getenv("ADMIN_PASSWORD")
+        if seed and admin_password:
+            from create_admin import DEV_ADMIN_ID, DEV_ADMIN_NAME, create_admin
+            create_admin(DEV_ADMIN_ID, DEV_ADMIN_NAME, admin_password)
+            print(f"관리자 계정 '{DEV_ADMIN_ID}' 생성 완료")
+        elif seed:
+            print("관리자 계정 없음: ADMIN_PASSWORD 환경변수를 넣고 다시 실행하면 admin01이 생깁니다.")
+    except (pymysql.MySQLError, ValueError) as e:
         sys.exit(f"DB 초기화 실패: {e}")
-    print(f"'{name}' 생성 완료")

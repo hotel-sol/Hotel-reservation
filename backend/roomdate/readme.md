@@ -21,7 +21,9 @@
 ```
 pip install -r requirements.txt
 python init_db.py                 # 개발용 DB(hotel)를 지우고 다시 만듦. 공용 DB에 쓰지 말 것
-python ../member/create_admin.py admin01 관리자   # 로그인할 관리자 계정(시드 계정은 비밀번호가 가짜라 로그인 불가)
+# 로그인할 관리자 계정: ADMIN_PASSWORD(팀 공용 비밀번호, 팀 채팅으로 받음)를 넣고 init_db를 실행하면 admin01이 생김
+#   PowerShell: $env:ADMIN_PASSWORD="..."; python init_db.py
+#   (시드의 다른 계정은 비밀번호가 가짜라 로그인 불가)
 uvicorn roomdate:app --reload     # http://127.0.0.1:8000/login → 예약 일자 관리. 로그인 · 상단 메뉴 · 다른 메뉴 뼈대 페이지까지 함께 뜸
 python -m pytest -q               # hotel_test DB를 새로 만들어 테스트
 ```
