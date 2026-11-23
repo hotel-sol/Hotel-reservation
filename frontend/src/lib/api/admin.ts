@@ -19,6 +19,9 @@ export const adminApi = {
   // 400 PAST_DATE · 409 ALREADY_CLOSED · 409 CLOSED_DATE_CONFLICT(그날 예약 있음)
   createClosedDate: (body: { roomId: number | null; closedDate: string; reason: string }) =>
     api<ClosedDate>("/admin/closed-dates", { method: "POST", json: body }),
+  // 기간 지정(시작 ~ 끝 포함, 최대 31일). 하루라도 막히면 전부 거부(오류 문구에 막힌 날짜) · 400 RANGE_TOO_LONG
+  createClosedDateRange: (body: { roomId: number | null; startDate: string; endDate: string; reason: string }) =>
+    api<ClosedDate[]>("/admin/closed-dates/range", { method: "POST", json: body }),
   deleteClosedDate: (id: number) => api<void>(`/admin/closed-dates/${id}`, { method: "DELETE" }),
 
   // ADM-003 예약 관리

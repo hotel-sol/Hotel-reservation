@@ -10,7 +10,7 @@ import type { ClosedDate, ReservationCounts, Room } from "@/types/api";
  * ADM-002 예약 일자(휴무일) 관리
  *  ① 객실 선택 · 월 이동   "전체 객실" = 호텔 전체 휴무, 특정 객실 = 그 방만 휴무
  *  ② 달력                  날짜별 휴무 여부 + 예약 수(대기 + 승인). 지난 날짜는 누를 수 없다
- *  ③ 휴무 지정 / 해제      예약이 있는 날은 백엔드가 409 로 막는다
+ *  ③ 휴무 지정 / 해제      예약이 있는 날은 백엔드가 409 로 막는다. 끝 날짜를 넣으면 기간 지정(최대 31일)
  *  ④ 이번 달 휴무일 목록   바로 해제
  */
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
@@ -41,6 +41,18 @@ function dayLabel(date: string) {
 
 const shortDate = (date: string) => date.slice(5).replace("-", "/");
 
+const MAX_RANGE_DAYS = 31; // 백엔드 POST /admin/closed-dates/range 와 같은 값
+
+/** "2026-12-30" + 2일 → "2027-01-01" */
+function addDays(date: string, n: number) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+const daysBetween = (from: string, to: string) =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+
 export default function ClosedDateManager() {
   const [roomId, setRoomId] = useState<number | null>(null); // null = 전체 객실
   const [month, setMonth] = useState(() => today().slice(0, 7));
@@ -49,6 +61,7 @@ export default function ClosedDateManager() {
   const [counts, setCounts] = useState<ReservationCounts>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [endDate, setEndDate] = useState(""); // 비우면 하루만, 넣으면 selected ~ endDate 기간 지정
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -89,6 +102,7 @@ export default function ClosedDateManager() {
     if (next.roomId !== undefined) setRoomId(next.roomId);
     setSelected(null);
     setReason("");
+    setEndDate("");
     setError("");
   }
 
@@ -98,6 +112,7 @@ export default function ClosedDateManager() {
     try {
       await action();
       setReason("");
+      setEndDate("");
       reload();
     } catch (err) {
       setError((err as ApiError).message);
@@ -106,8 +121,20 @@ export default function ClosedDateManager() {
     }
   }
 
-  const close = () =>
-    selected && run(() => adminApi.createClosedDate({ roomId, closedDate: selected, reason: reason.trim() }));
+  // 기간: 끝 날짜가 고른 날 뒤면 기간 지정, 아니면 하루 지정
+  const rangeEnd = selected && endDate > selected ? endDate : null;
+  const rangeDays = selected && rangeEnd ? daysBetween(selected, rangeEnd) : 1;
+  const inRange = (date: string) => !!selected && !!rangeEnd && date > selected && date <= rangeEnd;
+
+  const close = () => {
+    if (!selected) return;
+    const base = { roomId, reason: reason.trim() };
+    run(() =>
+      rangeEnd
+        ? adminApi.createClosedDateRange({ ...base, startDate: selected, endDate: rangeEnd })
+        : adminApi.createClosedDate({ ...base, closedDate: selected }),
+    );
+  };
 
   function open(row: ClosedDate) {
     const where = row.roomName ?? "호텔 전체";
@@ -170,11 +197,21 @@ export default function ClosedDateManager() {
                   key={date}
                   type="button"
                   disabled={past}
-                  onClick={() => { setSelected(date); setError(""); }}
+                  onClick={(e) => {
+                    // 날짜를 고른 상태에서 Shift+클릭하면 그날까지 기간으로 잡는다
+                    if (selected && date > selected && e.shiftKey) {
+                      setEndDate(date <= addDays(selected, MAX_RANGE_DAYS - 1) ? date : addDays(selected, MAX_RANGE_DAYS - 1));
+                    } else {
+                      setSelected(date);
+                      setEndDate("");
+                    }
+                    setError("");
+                  }}
                   className={[
                     "flex h-16 flex-col justify-between rounded-md border p-1.5 text-left text-xs sm:h-20",
                     isClosed ? "border-red-200 bg-red-50" : "border-slate-200 bg-white",
                     selected === date ? "ring-2 ring-slate-800" : "",
+                    inRange(date) ? "ring-2 ring-slate-400" : "",
                     past ? "cursor-not-allowed opacity-40" : "hover:border-slate-400",
                   ].join(" ")}
                 >
@@ -191,6 +228,7 @@ export default function ClosedDateManager() {
           <p className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
             <span><span className="mr-1 inline-block size-3 rounded-sm border border-red-200 bg-red-50 align-middle" />휴무일</span>
             <span><span className="mr-1 inline-block size-3 rounded-sm ring-2 ring-slate-800 align-middle" />선택한 날짜</span>
+            <span><span className="mr-1 inline-block size-3 rounded-sm ring-2 ring-slate-400 align-middle" />기간 (Shift+클릭)</span>
             <span>&quot;예약 N&quot; = 그날 잡힌 예약 수(대기 + 승인)</span>
           </p>
         </div>
@@ -229,8 +267,18 @@ export default function ClosedDateManager() {
                       <input className="input mt-1" value={reason} maxLength={200} required
                         placeholder="예: 연말 시설 점검" onChange={(e) => setReason(e.target.value)} />
                     </label>
-                    <button className="btn-primary w-full" disabled={busy || !reason.trim()}>휴무일로 지정</button>
-                    {sel.count > 0 && (
+                    <label className="block text-xs text-slate-500">
+                      끝 날짜 (기간으로 지정할 때만, 최대 {MAX_RANGE_DAYS}일)
+                      <input type="date" className="input mt-1" value={endDate}
+                        min={addDays(selected, 1)} max={addDays(selected, MAX_RANGE_DAYS - 1)}
+                        onChange={(e) => setEndDate(e.target.value)} />
+                    </label>
+                    <button className="btn-primary w-full" disabled={busy || !reason.trim()}>
+                      {rangeEnd ? `${shortDate(selected)} ~ ${shortDate(rangeEnd)} (${rangeDays}일) 휴무로 지정` : "휴무일로 지정"}
+                    </button>
+                    {rangeEnd ? (
+                      <p className="text-xs text-slate-500">하루라도 예약 · 휴무가 있으면 전체가 지정되지 않아요.</p>
+                    ) : sel.count > 0 && (
                       <p className="text-xs text-amber-700">이 날짜에 예약이 있어 지정되지 않아요. 먼저 예약을 취소해 주세요.</p>
                     )}
                   </form>
