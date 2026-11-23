@@ -31,6 +31,16 @@ export interface Room {
   isActive: "Y" | "N";
 }
 
+/** 첨부파일 (POST/GET /api/files). savedPath 는 fileUrl() 로 감싸 <img src> 에 쓴다 */
+export interface AttachFile {
+  fileId: number;
+  targetType: string;
+  targetId: number;
+  originalName: string;
+  savedPath: string;
+  fileSize: number;
+}
+
 export interface RecommendRoom extends Room {
   score: number;
   recentReservations: number; // 최근 30일 예약 수(대기 + 승인)
