@@ -3,7 +3,7 @@
  * 로그인한 사람의 member.role로 메뉴를 고른다.
  *   ADMIN      → HOTEL 관리자 · 객실 관리 · 예약 일자 관리 · 예약 관리 · 로그아웃
  *   USER       → HOTEL · 객실 추천 · 내 예약 · 로그아웃
- *   로그인 안 함 → HOTEL · 객실 추천 · 로그인
+ *   로그인 안 함 → HOTEL · 객실 추천 · 로그인 · 회원가입
  *
  * 쓰는 법: 페이지 맨 위에 두 줄.
  *   <header data-hotel-header></header>          (관리자 전용 화면은 data-hotel-header="admin")
@@ -11,9 +11,10 @@
  * "admin" 화면에 관리자가 아닌 사람이 오면 로그인 화면으로 보낸다. 진짜 막는 건 API(401/403)다.
  */
 (() => {
-  // ponytail: 회원 파트와 맞출 약속. 로그인 상태면 200 {memberId, name, role}, 아니면 401.
+  // 회원 기능(backend/member, 자체 회원가입)의 주소. /members/me는 로그인 상태면 200 {memberId, loginId, name, role}, 아니면 401.
   const ME_URL = "/members/me";
   const LOGIN_URL = "/login";
+  const SIGNUP_URL = "/signup";
   const LOGOUT_URL = "/logout";
 
   // ponytail: 메뉴를 코드에 고정. MENU 테이블(공통, role 칸)과 같은 내용이고, 메뉴 API가 생기면 거기서 받아 온다.
@@ -83,8 +84,12 @@
     const nav = document.createElement("nav");
     nav.setAttribute("aria-label", "주 메뉴");
     for (const item of menu.items) nav.append(link(item.name, item.url, location.pathname === item.url));
-    nav.append(role === "GUEST" ? link("로그인", LOGIN_URL, location.pathname === LOGIN_URL)
-                                : link("로그아웃", LOGOUT_URL, false));
+    if (role === "GUEST") {
+      nav.append(link("로그인", LOGIN_URL, location.pathname === LOGIN_URL),
+                 link("회원가입", SIGNUP_URL, location.pathname === SIGNUP_URL));
+    } else {
+      nav.append(link("로그아웃", LOGOUT_URL, false));
+    }
     header.replaceChildren(logo, nav);
   }
 

@@ -8,7 +8,7 @@
 |---|---|
 | `ADMIN` (관리자) | HOTEL 관리자 · 객실 관리 · 예약 일자 관리 · 예약 관리 · 로그아웃 |
 | `USER` (회원) | HOTEL · 객실 추천 · 내 예약 · 로그아웃 |
-| 로그인 안 함 | HOTEL · 객실 추천 · 로그인 |
+| 로그인 안 함 | HOTEL · 객실 추천 · 로그인 · 회원가입 |
 
 ## 붙이는 법
 각 화면 HTML의 `<body>` 맨 위에:
@@ -25,11 +25,12 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/layout", StaticFiles(directory="frontend/layout"), name="layout")
 ```
 
-## 회원 파트와 맞출 약속
+## 회원 기능과의 연결 (자체 회원가입, `backend/member`)
 머리줄은 페이지를 열 때 **`GET /members/me`** 를 한 번 부릅니다.
-- 로그인 상태: `200 {"memberId": 1, "name": "관리자", "role": "ADMIN"}` (`role`은 `member.role` 그대로)
+- 로그인 상태: `200 {"memberId": 1, "loginId": "admin", "name": "관리자", "role": "ADMIN"}` (`role`은 `member.role` 그대로)
 - 로그인 안 함: `401`
-- 로그인 정보는 쿠키(세션)로 간다고 가정했습니다(같은 주소라 `fetch`가 자동으로 보냄). 토큰 방식으로 정하면 `currentRole()`만 바꿉니다.
+- 로그인 정보는 세션 쿠키로 갑니다(같은 주소라 `fetch`가 자동으로 보냄).
+- 링크: 로그인 `/login`, 회원가입 `/signup`, 로그아웃 `/logout` (모두 `backend/member`가 제공)
 
 ## 미리보기
 ```
@@ -40,5 +41,4 @@ python -m http.server 8020      # http://127.0.0.1:8020/preview.html
 
 ## 팀 확인 필요
 - **화면 주소 규칙**: API 주소 뒤에 `/page`(`/admin/closed-dates/page`는 이미 이렇게 동작). 객실 관리 `/admin/rooms/page`, 예약 관리 `/admin/reservations/page`, 객실 추천 `/rooms/page`, 내 예약 `/reservations/page`. 바꾸려면 `layout.js`의 `MENUS`만 고칩니다.
-- **로그인 · 로그아웃 주소**: `/login`, `/logout`으로 두었습니다. 회원 파트가 정하면 `LOGIN_URL`, `LOGOUT_URL`만 바꿉니다.
 - **메뉴는 코드에 고정**: MENU 테이블(공통, `role` 칸)과 같은 내용입니다. 메뉴 API가 생기면 거기서 받아 오도록 바꿉니다.
