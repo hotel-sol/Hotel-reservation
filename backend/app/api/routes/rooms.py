@@ -9,6 +9,9 @@ from app.models import Room
 from app.schemas.common import Page
 from app.schemas.room import RecommendRoomOut, RoomOut, RoomSort
 from app.services.room_service import recommend_rooms
+from app.core.dates import today_kst
+from app.schemas.reservation import AvailableDatesOut
+from app.services.availability_service import month_range, room_calendar
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -50,7 +53,18 @@ def increase_view(room_id: int, db: DB):
     db.commit()
 
 
-@router.get("/{room_id}/available-dates")
+@router.get("/{room_id}/available-dates", response_model=AvailableDatesOut)
 def available_dates(room_id: int, db: DB, month: str = Query(..., pattern=r"^\d{4}-\d{2}$")):
-    # TODO(RSV-001): month 의 날짜별 선택 가능 여부 (지난 날짜 · 휴무일 · 예약된 날짜 제외)
-    fail(501, "NOT_IMPLEMENTED", "준비 중입니다.")
+    """RSV-001 예약 달력: month(예: 2026-12)의 날짜별 예약 가능 여부"""
+    room = db.get(Room, room_id)
+    if room is None or room.is_active != "Y":
+        fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
+    year, mon = (int(x) for x in month.split("-"))
+    if not 1 <= mon <= 12:
+        fail(400, "INVALID_MONTH", "월은 01~12 사이로 입력하세요.")
+    first, last = month_range(year, mon)
+    return AvailableDatesOut(
+        month=month,
+        today=today_kst(),
+        days=room_calendar(db, room_id, first, last),
+    )

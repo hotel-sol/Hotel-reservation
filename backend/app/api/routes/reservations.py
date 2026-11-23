@@ -5,6 +5,7 @@ from fastapi import APIRouter
 
 from app.api.deps import DB, CurrentMember
 from app.core.exceptions import fail
+from app.core.dates import today_kst
 from app.models import Reservation, Room
 from app.schemas.reservation import ReservationCreate, ReservationOut
 from app.services.room_service import available_room_filter
@@ -25,7 +26,9 @@ def create_reservation(body: ReservationCreate, member: CurrentMember, db: DB):
         fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
     if body.guest_count > room.max_guest:
         fail(400, "TOO_MANY_GUESTS", f"최대 {room.max_guest}명까지 예약할 수 있습니다.")
-    # TODO: 지난 날짜 차단, 동시 예약 경합 시 잠금(UPDLOCK) 처리
+    if body.check_in_date < today_kst():
+        fail(400, "PAST_DATE", "지난 날짜는 예약할 수 없습니다.")
+    # TODO: 동시 예약 경합 시 잠금(UPDLOCK) 처리    
     available = db.scalar(
         select(Room.room_id).where(Room.room_id == room.room_id, available_room_filter(body.check_in_date, body.check_out_date))
     )
