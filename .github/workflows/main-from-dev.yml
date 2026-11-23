@@ -1,0 +1,28 @@
+# main 으로 가는 PR 은 이 저장소의 dev 브랜치에서만 받는다.
+# 저장소 규칙(ruleset)이 이 검사(main-from-dev-only) 통과를 main 합치기 조건으로 요구한다.
+name: main-from-dev-only
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited]   # edited: PR 의 base 를 바꿨을 때 다시 검사
+
+permissions: {}   # 코드를 읽거나 쓸 필요 없음
+
+jobs:
+  main-from-dev-only:
+    name: main-from-dev-only
+    runs-on: ubuntu-latest
+    steps:
+      - name: main 으로는 dev 에서만 PR
+        env:
+          # 브랜치 이름은 PR 작성자가 정하는 값이라 스크립트에 직접 넣지 않고 환경변수로 넘긴다
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
+        run: |
+          if [ "$HEAD_REF" != "dev" ] || [ "$HEAD_REPO" != "$THIS_REPO" ]; then
+            echo "::error::main 으로 가는 PR 은 이 저장소의 dev 에서만 보낼 수 있습니다 (지금: $HEAD_REPO:$HEAD_REF). PR 의 base 를 dev 로 바꾸세요."
+            exit 1
+          fi
+          echo "OK: dev -> main"

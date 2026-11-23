@@ -43,7 +43,9 @@ git push -u origin feature/roomdate-calendar
 gh pr create --base dev                        # PR은 dev로 (main 아님)
 ```
 
-- **main · dev에 직접 push하지 않습니다.** 모든 변경은 PR로 합칩니다.
+- **main · dev에 직접 push할 수 없습니다**(저장소 규칙). 모든 변경은 PR로 합칩니다.
+- **PR은 본인이 만들고 본인이 합쳐도 됩니다**(승인 0명). 다른 사람에게 봐 달라고 하고 싶으면 리뷰를 요청하세요.
+- **main으로 가는 PR은 `dev`에서만** 됩니다. 다른 브랜치에서 main으로 PR을 열면 `main-from-dev-only` 검사(`.github/workflows/main-from-dev.yml`)가 실패해서 합칠 수 없습니다. 이때는 PR 화면에서 base를 `dev`로 바꾸면 됩니다.
 - PR 전에 `backend`에서 `uv run pytest`, `frontend`에서 `npm run build`가 통과해야 합니다.
 - 오래 걸리는 작업이면 중간에 `git pull origin dev`로 최신 dev를 받아 충돌을 일찍 풉니다.
 
