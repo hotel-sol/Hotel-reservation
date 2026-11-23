@@ -87,7 +87,8 @@ def clean_profile(name: str, phone: str | None, email: str | None) -> tuple[str,
 
 def ensure_unique(db, login_id: str | None, email: str | None, exclude_id: int | None = None) -> None:
     def taken(column, value):
-        q = select(Member.member_id).where(column == value)
+        # PostgreSQL은 대소문자를 구분해서 비교하므로 소문자로 맞춰 'Guest01'과 'guest01'을 같은 것으로 본다
+        q = select(Member.member_id).where(func.lower(column) == value.lower())
         if exclude_id:
             q = q.where(Member.member_id != exclude_id)
         return db.scalar(q) is not None

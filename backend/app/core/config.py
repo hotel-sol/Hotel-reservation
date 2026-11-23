@@ -1,8 +1,11 @@
 """환경 설정 — backend/.env 값을 읽어 온다."""
+import re
 from functools import lru_cache
-from urllib.parse import quote_plus
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+SHARED_SCHEMA = "hotel"  # 시연 · 통합 확인용 공용 스키마
 
 
 class Settings(BaseSettings):
@@ -11,12 +14,15 @@ class Settings(BaseSettings):
     app_env: str = "local"
     app_name: str = "Hotel Reservation API"
 
-    # 개발: 각자 PC의 MariaDB. 시연 DB는 미정(정해지면 .env 값만 바꾼다)
-    db_host: str = "127.0.0.1"
-    db_port: int = 3306
-    db_name: str = "hotel"
-    db_user: str = "root"
-    db_password: str = ""
+    # Supabase(PostgreSQL) 접속 주소: 프로젝트 Connect → Session pooler URI (비밀번호 포함, 커밋 금지)
+    database_url: str = ""
+    # 테이블이 들어 있는 스키마. 팀 Supabase 프로젝트 하나를 5명이 같이 쓰므로 스키마로 나눈다.
+    #   hotel          = 시연 · 통합 확인용 공용 (기본값)
+    #   hotel_<이름>   = 각자 개발용,  테스트는 자동으로 <내 스키마>_test
+    # (Supabase 기본 public을 건드리지 않고, REST API에도 노출되지 않는 전용 스키마)
+    db_schema: str = SHARED_SCHEMA
+    # true 일 때만 init_db · 테스트가 스키마를 지우고 다시 만든다. 공용 hotel 은 이 값과 상관없이 --reset-shared 필요
+    db_reset_allowed: bool = False
 
     session_secret: str
     session_cookie: str = "hotel_session"
@@ -28,17 +34,24 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     upload_dir: str = "uploads"
 
-    @property
-    def database_url(self) -> str:
-        return self.server_url + self.db_name + "?charset=utf8mb4"
+    @field_validator("db_schema")
+    @classmethod
+    def schema_is_identifier(cls, v: str) -> str:
+        # SQL 문장에 그대로 들어가므로 영문 소문자 · 숫자 · _ 만 허용
+        if not re.fullmatch(r"[a-z_][a-z0-9_]{0,62}", v):
+            raise ValueError("DB_SCHEMA 는 영문 소문자 · 숫자 · _ 만 쓸 수 있습니다.")
+        return v
 
     @property
-    def server_url(self) -> str:
-        """DB 이름 없이 서버까지만 (DB 만들기 · 지우기용)."""
-        return (
-            f"mysql+pymysql://{quote_plus(self.db_user)}:{quote_plus(self.db_password)}"
-            f"@{self.db_host}:{self.db_port}/"
-        )
+    def sqlalchemy_url(self) -> str:
+        """Supabase가 주는 postgresql://... 주소를 psycopg 드라이버 주소로 바꾼다."""
+        if not self.database_url:
+            raise RuntimeError("backend/.env 에 DATABASE_URL(Supabase Session pooler URI)을 넣어 주세요.")
+        url = self.database_url.replace("postgres://", "postgresql://", 1)
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        if "sslmode=" not in url:
+            url += ("&" if "?" in url else "?") + "sslmode=require"
+        return url
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -5,7 +5,7 @@
 | 폴더 | 내용 |
 |---|---|
 | [`frontend/`](frontend/README.md) | Next.js 화면 (:3000). `/api/*`를 백엔드로 넘김 |
-| [`backend/`](backend/README.md) | FastAPI + SQLAlchemy (:8000). 개발 DB는 각자 PC의 MariaDB |
+| [`backend/`](backend/README.md) | FastAPI + SQLAlchemy (:8000). DB는 Supabase(PostgreSQL) 팀 프로젝트 하나, 개발은 각자 스키마 hotel_<이름> |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | **전체 구조 · ERD · 예약 흐름 · 상태 · 화면별 API 현황 (그림)** |
 | [`docs/README.md`](docs/README.md) | DB 설계 · 화면 설계서 (1~5번) |
 | [`docs/hotel_reservation_ddl.sql`](docs/hotel_reservation_ddl.sql) | 테이블 정의 (기준) |
@@ -16,7 +16,7 @@
 # 1) 백엔드 — backend 폴더
 cp .env.example .env                 # 값 채우기 (커밋 금지)
 uv sync
-uv run python -m app.db.init_db      # 로컬 MariaDB에 hotel DB 생성
+uv run python -m app.db.init_db      # 내 스키마(hotel_<이름>)에 테이블 · 개발용 데이터 생성
 uv run fastapi dev app/main.py --port 8000
 
 # 2) 프론트 — frontend 폴더

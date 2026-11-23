@@ -43,7 +43,7 @@ def list_reservations(
     if to_date:
         q = q.where(Reservation.check_in_date <= to_date)
     if keyword:
-        cond = Member.name.contains(keyword)
+        cond = Member.name.icontains(keyword)
         if keyword.isdigit():
             cond = or_(cond, Reservation.reservation_id == int(keyword))
         q = q.where(cond)

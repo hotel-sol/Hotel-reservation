@@ -29,7 +29,7 @@ def list_rooms(
 ):
     q = select(Room)
     if keyword:
-        q = q.where(Room.room_name.contains(keyword))
+        q = q.where(Room.room_name.icontains(keyword))
     if is_active:
         q = q.where(Room.is_active == is_active)
     total = db.scalar(select(func.count()).select_from(q.subquery())) or 0

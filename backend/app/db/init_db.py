@@ -1,56 +1,57 @@
-"""로컬 개발 DB를 지우고 다시 만든다. backend 폴더에서: uv run python -m app.db.init_db [--no-seed]
+"""스키마를 지우고 다시 만든다. backend 폴더에서: uv run python -m app.db.init_db [--no-seed] [--reset-shared]
 
-DB_NAME(기본 hotel)을 DROP 후 팀 DDL(docs/hotel_reservation_ddl.sql), dev_seed.sql 순서로 실행한다.
+.env의 DB_SCHEMA(각자 hotel_<이름>)를 DROP 후 다시 만들고 팀 DDL(docs/hotel_reservation_ddl.sql), dev_seed.sql 순서로 실행한다.
 .env에 ADMIN_PASSWORD가 있으면 팀 공용 개발용 관리자 admin01도 만든다.
-DROP DATABASE를 하므로 DB_HOST가 이 PC(127.0.0.1 · localhost)일 때만 실행된다.
+
+팀 Supabase 프로젝트 하나를 5명이 같이 쓰므로 실수 방지 장치를 둔다.
+- .env에 DB_RESET_ALLOWED=true 가 있어야 실행된다.
+- 공용 스키마 hotel(시연 · 통합 확인용)은 --reset-shared 를 직접 붙였을 때만 지운다. 팀에 알리고 실행할 것.
 """
 import sys
 from pathlib import Path
 
-import pymysql
+import psycopg
+from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.config import get_settings
+from app.core.config import SHARED_SCHEMA, get_settings
+from app.db.session import engine
 
 HERE = Path(__file__).parent
 TEAM_DDL = HERE.parents[2] / "docs" / "hotel_reservation_ddl.sql"
-LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
 
 
-def run_sql_file(cursor, path: Path) -> None:
-    # ponytail: ';' 기준 단순 분리. 프로시저 · 트리거를 넣으면 mysql 클라이언트로 바꾼다.
-    for statement in path.read_text(encoding="utf-8").split(";"):
-        code = [line for line in statement.splitlines() if not line.strip().startswith("--")]
-        if "\n".join(code).strip():
-            cursor.execute(statement)
-
-
-def init_db(db_name: str, seed: bool = True) -> None:
+def init_db(schema: str | None = None, seed: bool = True, reset_shared: bool = False) -> None:
     s = get_settings()
-    if s.db_host not in LOCAL_HOSTS:
-        raise RuntimeError(f"DB_HOST={s.db_host}: 공용 DB를 지우지 않도록 로컬 DB에서만 실행합니다.")
-    from app.db.session import engine
-
-    engine.dispose()  # 열려 있는 연결이 DROP DATABASE를 막지 않게
-    conn = pymysql.connect(host=s.db_host, port=s.db_port, user=s.db_user, password=s.db_password, charset="utf8mb4")
+    schema = schema or s.db_schema
+    if not s.db_reset_allowed:
+        raise RuntimeError(".env에 DB_RESET_ALLOWED=true 가 있을 때만 스키마를 지우고 다시 만듭니다.")
+    if schema == SHARED_SCHEMA and not reset_shared:
+        raise RuntimeError(
+            f"'{SHARED_SCHEMA}'는 시연 · 통합 확인용 공용 스키마입니다. .env의 DB_SCHEMA를 hotel_<이름>으로 바꾸거나,"
+            " 팀에 알린 뒤 --reset-shared 를 붙여 실행하세요."
+        )
+    engine.dispose()  # 열려 있는 연결이 DROP SCHEMA를 막지 않게
+    raw = engine.raw_connection()  # psycopg 연결: 세미콜론으로 이어진 여러 문장을 한 번에 실행할 수 있다
     try:
-        with conn.cursor() as cur:
-            cur.execute(f"DROP DATABASE IF EXISTS `{db_name}`")
-            cur.execute(f"CREATE DATABASE `{db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
-            cur.execute(f"USE `{db_name}`")
-            run_sql_file(cur, TEAM_DDL)
+        with raw.cursor() as cur:
+            cur.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+            cur.execute(f'CREATE SCHEMA "{schema}"')
+            cur.execute(f'SET search_path TO "{schema}"')
+            cur.execute(TEAM_DDL.read_text(encoding="utf-8"))
             if seed:
-                run_sql_file(cur, HERE / "dev_seed.sql")
-        conn.commit()
+                cur.execute((HERE / "dev_seed.sql").read_text(encoding="utf-8"))
+        raw.commit()
     finally:
-        conn.close()
+        raw.close()
+        engine.dispose()  # 새 스키마로 다시 연결하게
 
 
 if __name__ == "__main__":
     settings = get_settings()
     seed = "--no-seed" not in sys.argv
     try:
-        init_db(settings.db_name, seed=seed)
-        print(f"'{settings.db_name}' 생성 완료")
+        init_db(seed=seed, reset_shared="--reset-shared" in sys.argv)
+        print(f"스키마 '{settings.db_schema}' 생성 완료")
         if seed and settings.admin_password:
             from app.db.create_admin import DEV_ADMIN_ID, DEV_ADMIN_NAME, create_admin
 
@@ -58,5 +59,5 @@ if __name__ == "__main__":
             print(f"관리자 계정 '{DEV_ADMIN_ID}' 생성 완료")
         elif seed:
             print("관리자 계정 없음: .env에 ADMIN_PASSWORD를 넣고 다시 실행하면 admin01이 생깁니다.")
-    except (pymysql.MySQLError, ValueError, RuntimeError) as e:
+    except (SQLAlchemyError, psycopg.Error, ValueError, RuntimeError) as e:
         sys.exit(f"DB 초기화 실패: {e}")
