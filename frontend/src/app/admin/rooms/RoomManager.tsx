@@ -6,6 +6,7 @@ import { adminApi, type RoomInput } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/client";
 import { won } from "@/lib/format";
 import type { Page, Room } from "@/types/api";
+import RoomPhotos from "./RoomPhotos";
 
 const EMPTY: RoomInput = { roomName: "", roomType: "", maxGuest: 2, price: 100000, description: "" };
 
@@ -15,6 +16,7 @@ export default function RoomManager() {
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page<Room> | null>(null);
   const [editing, setEditing] = useState<{ id: number | null; form: RoomInput } | null>(null);
+  const [photoRoom, setPhotoRoom] = useState<Room | null>(null); // 사진 관리 중인 객실
   const [error, setError] = useState("");
 
   // 저장·승인 뒤 다시 불러올 때 reloadKey 를 올린다
@@ -34,8 +36,7 @@ export default function RoomManager() {
     if (!editing) return;
     try {
       if (editing.id) await adminApi.updateRoom(editing.id, editing.form);
-      else await adminApi.createRoom(editing.form);
-      // TODO(ADM-001): 사진 업로드 (POST /files, jpg·png 최대 5장)
+      else setPhotoRoom(await adminApi.createRoom(editing.form)); // 새 객실은 바로 사진을 올릴 수 있게 사진 창을 연다
       setEditing(null);
       load();
     } catch (err) {
@@ -80,6 +81,8 @@ export default function RoomManager() {
         </form>
       )}
 
+      {photoRoom && <RoomPhotos key={photoRoom.roomId} room={photoRoom} onClose={() => setPhotoRoom(null)} />}
+
       <table className="w-full overflow-hidden rounded-xl bg-white text-sm shadow-sm">
         <thead className="bg-slate-100 text-left text-slate-600">
           <tr><th className="p-3">번호</th><th>객실명</th><th>종류</th><th>인원</th><th>요금</th><th>조회수</th><th>상태</th><th></th></tr>
@@ -92,6 +95,7 @@ export default function RoomManager() {
               <td>{r.isActive === "Y" ? "사용" : <span className="text-slate-400">비활성</span>}</td>
               <td className="space-x-1 pr-3 text-right">
                 <button className="btn-outline px-2 py-1" onClick={() => setEditing({ id: r.roomId, form: { roomName: r.roomName, roomType: r.roomType, maxGuest: r.maxGuest, price: r.price, description: r.description } })}>수정</button>
+                <button className="btn-outline px-2 py-1" onClick={() => setPhotoRoom(r)}>사진</button>
                 <button className="btn-outline px-2 py-1" onClick={() => toggle(r)}>{r.isActive === "Y" ? "비활성화" : "활성화"}</button>
               </td>
             </tr>
