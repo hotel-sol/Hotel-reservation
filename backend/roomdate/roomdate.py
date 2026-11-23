@@ -3,6 +3,7 @@
 GET    /admin/closed-dates?month=YYYY-MM[&roomId=]  달의 휴무일 + 날짜별 예약 수
 POST   /admin/closed-dates                          휴무일 지정
 DELETE /admin/closed-dates/{closedDateId}           휴무 해제
+GET    /admin/closed-dates/page                     관리자 화면(roomdate.html)
 
 다른 앱에 붙일 때: app.include_router(roomdate.router)
 혼자 실행: uvicorn roomdate:app --reload  (backend/roomdate 폴더에서)
@@ -10,9 +11,11 @@ DELETE /admin/closed-dates/{closedDateId}           휴무 해제
 import calendar
 import os
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import pymysql
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 KST = timezone(timedelta(hours=9))
@@ -121,6 +124,9 @@ def list_closed_dates(
         closed = [to_json(r) for r in cur.fetchall()]
         cur.execute(stay_sql, stay_params)
         stays = cur.fetchall()
+        # ① 객실 선택용. ponytail: 객실 API(GET /admin/rooms)가 main에 합쳐지면 화면이 그쪽을 써도 된다.
+        cur.execute("SELECT room_id, room_name FROM room ORDER BY room_id")
+        rooms = [{"roomId": r["room_id"], "roomName": r["room_name"]} for r in cur.fetchall()]
 
     counts = {}
     for d in range(1, last.day + 1):
@@ -129,7 +135,14 @@ def list_closed_dates(
         if n:
             counts[day.isoformat()] = n
 
-    return {"month": month, "roomId": room_id, "closedDates": closed, "reservationCounts": counts}
+    return {"month": month, "roomId": room_id, "rooms": rooms,
+            "closedDates": closed, "reservationCounts": counts}
+
+
+@router.get("/page", include_in_schema=False)
+def admin_page():
+    """ADM-002 화면 본문(①~④). 상단 메뉴(객실 관리 · 예약 관리 · 로그아웃)는 공통 레이아웃 담당이 만든다."""
+    return FileResponse(Path(__file__).with_name("roomdate.html"))
 
 
 class ClosedDateIn(BaseModel):

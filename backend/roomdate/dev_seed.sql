@@ -18,8 +18,8 @@ INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date, gues
   (2, 3, '2026-12-24', '2026-12-26', 2, 240000, 'PENDING'),
   (2, 2, '2026-12-20', '2026-12-21', 1, 80000, 'CANCELED');
 
-INSERT INTO closed_date (room_id, closed_date, reason) VALUES
-  (NULL, '2026-12-31', '연말 시설 점검');
+-- 휴무일은 비워 둔다. 화면 예시의 12/31 휴무는 관리자가 직접 지정하는 시나리오다
+-- (31일 클릭 → ③에 사유 입력 → 지정 → ④ 목록에 생김).
 
 INSERT INTO menu (parent_id, menu_name, menu_url, role, sort_order) VALUES
   (NULL, '객실 관리', '/admin/rooms', 'ADMIN', 1),

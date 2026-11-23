@@ -4,9 +4,9 @@
 """
 import os
 
-os.environ["DB_NAME"] = "hotel_test"  # db.py import 전에
+os.environ["DB_NAME"] = "hotel_test"  # roomdate import 전에
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -31,7 +31,7 @@ def add_reservation(room_id, check_in, nights, status="PENDING"):
     conn = connect()
     with conn.cursor() as cur:
         cur.execute(
-            "INSERT INTO RESERVATION (member_id, room_id, check_in_date, check_out_date,"
+            "INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date,"
             " guest_count, total_price, status) VALUES (2, %s, %s, %s, 1, 80000, %s)",
             (room_id, check_in, check_in + timedelta(days=nights), status),
         )
@@ -92,14 +92,34 @@ def test_input_and_permission_errors():
     assert post(D1, headers={}).status_code == 401
 
 
-def test_month_counts_match_screen_example():
-    listed = client.get("/admin/closed-dates?month=2026-12", headers=ADMIN).json()
-    assert listed["reservationCounts"] == {
+def test_screen_scenario_close_dec_31():
+    """화면설계서 시나리오: 12월 달력 → 31일 클릭(예약 0건) → 사유 입력 후 지정 → ④ 목록에 생김."""
+    month = lambda q="": client.get(f"/admin/closed-dates?month=2026-12{q}", headers=ADMIN).json()
+
+    before = month()
+    assert before["reservationCounts"] == {
         "2026-12-15": 1, "2026-12-16": 1, "2026-12-17": 1,   # 101호 15~18 (승인)
         "2026-12-24": 1, "2026-12-25": 1,                    # 201호 24~26 (대기)
     }                                                        # 20일 취소 예약은 빠짐
-    assert [c["closedDate"] for c in listed["closedDates"]] == ["2026-12-31"]
+    assert before["closedDates"] == []                       # ④ 처음엔 비어 있음
+    assert "2026-12-31" not in before["reservationCounts"]   # ③ "이 날 예약 0건"
+    assert [r["roomName"] for r in before["rooms"]][:2] == ["101호", "102호"]  # ① 객실 선택
 
-    room1 = client.get("/admin/closed-dates?month=2026-12&roomId=1", headers=ADMIN).json()
-    assert set(room1["reservationCounts"]) == {"2026-12-15", "2026-12-16", "2026-12-17"}
-    assert room1["closedDates"][0]["roomId"] is None         # 호텔 전체 휴무는 방별 화면에도 보임
+    r = post(date(2026, 12, 31), reason="연말 시설 점검")
+    assert r.status_code == 201, r.text
+
+    after = month()
+    assert [(c["closedDate"], c["roomId"], c["reason"]) for c in after["closedDates"]] == [
+        ("2026-12-31", None, "연말 시설 점검")]               # ④ "12/31 전체 · 연말 시설 점검"
+    assert after["closedDates"][0]["roomId"] is None
+    assert month("&roomId=1")["closedDates"][0]["roomId"] is None  # 호텔 전체 휴무는 방별 화면에도 보임
+    assert set(month("&roomId=1")["reservationCounts"]) == {"2026-12-15", "2026-12-16", "2026-12-17"}
+
+    assert post(date(2026, 12, 15)).json()["detail"]["message"] == \
+        "이 날짜에 예약 1건이 있습니다. 먼저 예약을 취소해 주세요."
+
+
+def test_admin_page_is_served():
+    r = client.get("/admin/closed-dates/page")
+    assert r.status_code == 200
+    assert "휴무일로 지정" in r.text
