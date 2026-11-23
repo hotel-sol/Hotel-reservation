@@ -114,6 +114,38 @@ def test_range_input_errors(client):
     assert post_range(client, D1 + timedelta(days=90), D1 + timedelta(days=91), room_id=999).status_code == 404
 
 
+def recommended_ids(client, check_in, nights=1):
+    q = f"checkIn={check_in}&checkOut={check_in + timedelta(days=nights)}&size=50"
+    return {r["roomId"] for r in client.get(f"/api/rooms/recommend?{q}").json()["items"]}
+
+
+def reserve(client, room_id, check_in, nights=1):
+    body = {"roomId": room_id, "checkInDate": check_in.isoformat(),
+            "checkOutDate": (check_in + timedelta(days=nights)).isoformat(), "guestCount": 1}
+    return client.post("/api/reservations", json=body, headers=GUEST)
+
+
+def test_closed_dates_block_recommend_and_reservation(client):
+    """3C: 휴무가 객실 추천 · 예약에서 실제로 막히는지 (다른 파트가 같이 쓰는 available_room_filter)."""
+    all_rooms = recommended_ids(client, D1)
+    assert {1, 2} <= all_rooms
+
+    # 객실 판매 중지: 그 방만 빠지고 예약도 거부
+    assert post_range(client, D1, D1 + timedelta(days=1), room_id=1).status_code == 201
+    assert recommended_ids(client, D1) == all_rooms - {1}
+    assert reserve(client, 1, D1).json()["detail"]["code"] == "ROOM_NOT_AVAILABLE"
+    assert reserve(client, 2, D1).status_code == 201
+
+    # 호텔 전체 휴무: 기간에 하루라도 걸리면 모든 방이 빠진다
+    assert post(client, D1 + timedelta(days=5)).status_code == 201
+    assert recommended_ids(client, D1 + timedelta(days=4), nights=2) == set()
+    assert reserve(client, 3, D1 + timedelta(days=4), nights=2).status_code == 409
+
+    # 휴무일이 체크아웃 날이면 묵지 않으므로 예약 가능
+    assert 3 in recommended_ids(client, D1 + timedelta(days=4))
+    assert reserve(client, 3, D1 + timedelta(days=4)).status_code == 201
+
+
 def test_screen_scenario_close_dec_31(client):
     """화면설계서 시나리오: 12월 달력 → 31일 클릭(예약 0건) → 사유 입력 후 지정 → ④ 목록에 생김."""
     def counts(q=""):

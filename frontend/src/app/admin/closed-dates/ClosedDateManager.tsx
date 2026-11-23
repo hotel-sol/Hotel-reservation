@@ -41,6 +41,9 @@ function dayLabel(date: string) {
 
 const shortDate = (date: string) => date.slice(5).replace("-", "/");
 
+// 3C 사유 선택지(화면 선택지). DB에는 "점검 · 보일러" 같은 글자로 저장한다(테이블 변경 없음)
+const REASON_TYPES = ["공사", "점검", "행사", "휴관", "기타"];
+
 const MAX_RANGE_DAYS = 31; // 백엔드 POST /admin/closed-dates/range 와 같은 값
 
 function addDays(date: string, n: number) {
@@ -57,7 +60,8 @@ export default function ClosedDateManager() {
   const [counts, setCounts] = useState<ReservationCounts>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [endDate, setEndDate] = useState(""); // 기간 지정 끝 날짜. 비면 하루만
-  const [reason, setReason] = useState("");
+  const [reasonType, setReasonType] = useState("");
+  const [reason, setReason] = useState(""); // 자세한 내용(기타면 필수)
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -116,6 +120,7 @@ export default function ClosedDateManager() {
     if (next.month !== undefined) setMonth(next.month);
     if (next.roomId !== undefined) setRoomId(next.roomId);
     pick(null);
+    setReasonType("");
     setReason("");
   }
 
@@ -124,6 +129,7 @@ export default function ClosedDateManager() {
     setError("");
     try {
       await action();
+      setReasonType("");
       setReason("");
       setEndDate("");
       reload();
@@ -134,6 +140,10 @@ export default function ClosedDateManager() {
     }
   }
 
+  const detail = reason.trim();
+  const fullReason = reasonType === "기타" ? detail : detail ? `${reasonType} · ${detail}` : reasonType;
+  const reasonReady = !!reasonType && (reasonType !== "기타" || !!detail);
+
   const isRange = !!selected && endDate > selected;
   const inRange = (date: string) => isRange && date > selected! && date <= endDate;
 
@@ -141,8 +151,8 @@ export default function ClosedDateManager() {
     selected &&
     run(() =>
       isRange
-        ? adminApi.createClosedDateRange({ roomId, startDate: selected, endDate, reason: reason.trim() })
-        : adminApi.createClosedDate({ roomId, closedDate: selected, reason: reason.trim() }),
+        ? adminApi.createClosedDateRange({ roomId, startDate: selected, endDate, reason: fullReason })
+        : adminApi.createClosedDate({ roomId, closedDate: selected, reason: fullReason }),
     );
 
   function open(row: ClosedDate) {
@@ -267,15 +277,23 @@ export default function ClosedDateManager() {
                   >
                     <label className="block text-xs text-slate-500">
                       휴무 사유
-                      <input className="input mt-1" value={reason} maxLength={200} required
-                        placeholder="예: 연말 시설 점검" onChange={(e) => setReason(e.target.value)} />
+                      <select className="input mt-1" value={reasonType} required
+                        onChange={(e) => setReasonType(e.target.value)}>
+                        <option value="">선택하세요</option>
+                        {REASON_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </label>
+                    <label className="block text-xs text-slate-500">
+                      자세한 내용 {reasonType === "기타" ? "(필수)" : "(선택)"}
+                      <input className="input mt-1" value={reason} maxLength={180} required={reasonType === "기타"}
+                        placeholder="예: 보일러 교체" onChange={(e) => setReason(e.target.value)} />
                     </label>
                     <label className="block text-xs text-slate-500">
                       끝 날짜 (기간으로 지정할 때만, 최대 31일)
                       <input className="input mt-1" type="date" value={endDate} min={selected}
                         max={addDays(selected, MAX_RANGE_DAYS - 1)} onChange={(e) => setEndDate(e.target.value)} />
                     </label>
-                    <button className="btn-primary w-full" disabled={busy || !reason.trim()}>
+                    <button className="btn-primary w-full" disabled={busy || !reasonReady}>
                       {isRange ? `${shortDate(selected)} ~ ${shortDate(endDate)} 휴무로 지정` : "휴무일로 지정"}
                     </button>
                     {isRange && (
