@@ -1,22 +1,30 @@
-# Backend — FastAPI + MariaDB
+# Backend — FastAPI + Supabase(PostgreSQL)
 
 ## 처음 한 번 (backend 폴더에서)
 
 ```bash
 cp .env.example .env              # Windows: copy .env.example .env → 값 채우기 (커밋 금지)
 uv sync                           # Python 3.12 + 패키지 설치
-uv run python -m app.db.init_db   # 로컬 DB(hotel)를 지우고 팀 DDL + 개발용 데이터로 다시 만듦
+uv run python -m app.db.init_db   # 내 스키마(hotel_<이름>)를 지우고 팀 DDL + 개발용 데이터로 다시 만듦
 ```
 
-- 개발 DB는 **각자 PC의 MariaDB**입니다. 시연 DB는 아직 정하지 않았고, 정해지면 `.env` 값만 바꿉니다.
-- `init_db`는 DB를 지우므로 `DB_HOST`가 `127.0.0.1` · `localhost`일 때만 실행됩니다.
-- `.env`에 `ADMIN_PASSWORD`(팀 채팅으로 받음)를 넣고 `init_db`를 실행하면 팀 공용 관리자 `admin01`이 생깁니다. 다른 관리자는 `uv run python -m app.db.create_admin <아이디> <이름>`.
+- DB는 **Supabase(PostgreSQL) 팀 프로젝트 하나를 5명이 같이** 씁니다. 비밀번호는 팀 채팅으로만 주고받습니다(저장소 · 노션 금지).
+- `.env`의 `DATABASE_URL`에는 프로젝트 → Connect → **Session pooler** URI를 넣습니다(Direct connection은 IPv6 전용이라 안 될 수 있음).
+- 서로의 데이터를 지우지 않도록 **스키마로 나눕니다.**
+
+  | 용도 | `DB_SCHEMA` | 지우고 다시 만들기 |
+  |---|---|---|
+  | 각자 개발 | `hotel_<영문 이름>` (예: `hotel_minhyuk`) | `init_db`로 언제든 (`DB_RESET_ALLOWED=true`) |
+  | 각자 테스트 | 자동으로 `hotel_<이름>_test` | 테스트가 매번 |
+  | 시연 · 통합 확인 | `hotel` (공용) | 팀에 알리고 `--reset-shared`를 붙였을 때만 |
+- 열쇠(비밀번호)는 하나라서 남의 스키마도 기술적으로는 열립니다. **남의 스키마와 `hotel`은 지우거나 고치지 않는 것**이 규칙입니다.
+- 무료 플랜은 동시 연결 수가 적어서 서버 하나가 연결을 최대 5개만 씁니다.
 
 ## 실행 · 테스트
 
 ```bash
 uv run fastapi dev app/main.py --port 8000   # http://localhost:8000/docs
-uv run pytest                                # hotel_test DB를 새로 만들어 테스트 (로컬 MariaDB 필요)
+uv run pytest                                # hotel_<이름>_test 스키마를 새로 만들어 테스트
 ```
 
 - DB 연결 확인: http://localhost:8000/api/health/db
@@ -34,7 +42,7 @@ app/
 │   └── dates.py            today_kst() 오늘 날짜(한국 시간)
 ├── db/
 │   ├── base.py · session.py   SQLAlchemy Base, engine, get_db()
-│   ├── init_db.py          로컬 DB 다시 만들기 (팀 DDL + dev_seed.sql)
+│   ├── init_db.py          개발 DB 스키마 다시 만들기 (팀 DDL + dev_seed.sql)
 │   ├── create_admin.py     관리자 계정 만들기
 │   └── dev_seed.sql        화면설계서 12월 예시와 같은 가상 데이터
 ├── models/                 테이블 1개 = 파일 1개 (member, room, reservation, closed_date, attach_file, menu)

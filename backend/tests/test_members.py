@@ -129,7 +129,7 @@ def test_withdraw_keeps_reservation_rows(client):
     me = client.get("/api/members/me").json()
     sql("INSERT INTO room (room_name, room_type, max_guest, price) VALUES ('101호', 'STANDARD', 2, 80000)")
     sql("INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date, guest_count, total_price, status)"
-        " VALUES (:mid, 1, CURDATE() + INTERVAL 5 DAY, CURDATE() + INTERVAL 6 DAY, 1, 80000, 'PENDING')",
+        " VALUES (:mid, 1, CURRENT_DATE + 5, CURRENT_DATE + 6, 1, 80000, 'PENDING')",
         mid=me["memberId"])
     r = client.post("/api/members/me/withdraw", json={"password": "password123"})
     assert r.json()["detail"]["code"] == "HAS_RESERVATION"  # 진행 중인 예약이 있으면 불가

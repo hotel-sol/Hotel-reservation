@@ -13,5 +13,5 @@ def health():
 
 @router.get("/db")
 def health_db(db: DB):
-    version = db.execute(text("SELECT @@VERSION")).scalar_one()
+    version = db.execute(text("SELECT version()")).scalar_one()
     return {"status": "ok", "db": version.splitlines()[0]}

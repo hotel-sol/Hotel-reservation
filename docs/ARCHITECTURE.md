@@ -1,6 +1,6 @@
 # 태양의 호텔 — 시스템 구조 한눈에 보기
 
-GitHub에서 그림(Mermaid)으로 보입니다. 기준: Step 1(프로토타입) = 1~5번 설계서 범위. 개발 DB는 각자 PC의 MariaDB, 시연 DB는 미정.
+GitHub에서 그림(Mermaid)으로 보입니다. 기준: Step 1(프로토타입) = 1~5번 설계서 범위. DB는 Supabase(PostgreSQL) 팀 프로젝트 하나: 각자 개발은 스키마 hotel_<이름>, 시연은 공용 스키마 hotel.
 
 ## 1. 전체 구조
 
@@ -16,7 +16,7 @@ flowchart LR
         S["services<br/>추천 점수 · 빈방 판정"]
         M["models<br/>(SQLAlchemy)"]
     end
-    DB[("MariaDB<br/>hotel")]
+    DB[("Supabase PostgreSQL<br/>스키마 hotel")]
 
     U -- "화면 요청" --> P
     U -- "API 호출 /api/* + 로그인 쿠키" --> RW
@@ -27,7 +27,7 @@ flowchart LR
 ```
 
 - 브라우저는 `localhost:3000` 한 주소만 봅니다. 그래서 로그인 쿠키(HttpOnly, SameSite=Lax)가 그대로 동작하고 CORS 설정이 필요 없습니다.
-- DDL: `docs/hotel_reservation_ddl.sql`. 로컬 DB 만들기: `backend`에서 `uv run python -m app.db.init_db`.
+- DDL: `docs/hotel_reservation_ddl.sql`. 개발 DB 만들기: `backend`에서 `uv run python -m app.db.init_db`(내 스키마 `hotel_<이름>`에만. 공용 `hotel`은 `--reset-shared`가 있어야 지워짐).
 
 ## 2. DB 구조 (ERD)
 
@@ -161,7 +161,7 @@ sequenceDiagram
     participant B as 브라우저
     participant N as Next.js (/api 프록시)
     participant F as FastAPI
-    participant D as MariaDB
+    participant D as Supabase DB
     B->>N: POST /api/members/login {loginId, password}
     N->>F: 그대로 전달
     F->>D: member 조회, scrypt 비밀번호 확인 (5번 틀리면 10분 잠금)
