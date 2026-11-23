@@ -31,6 +31,17 @@ export interface Room {
   isActive: "Y" | "N";
 }
 
+/** 객실 관리 목록 요약 (GET /api/admin/rooms/summary). 휴무 = 예약 일자 관리(closed_date) 기준, 오늘 = 한국 시간 */
+export interface RoomSummary {
+  total: number;
+  onSale: number; // 사용 중이고 오늘 휴무가 아닌 객실 (휴무 예정 포함)
+  closedToday: number;
+  closedSoon: number;
+  inactive: number;
+  closedTodayRoomIds: number[];
+  closedSoonRoomIds: number[];
+}
+
 /** 첨부파일 (POST/GET /api/files). savedPath 는 fileUrl() 로 감싸 <img src> 에 쓴다 */
 export interface AttachFile {
   fileId: number;
