@@ -34,6 +34,7 @@ export interface Room {
 export interface RecommendRoom extends Room {
   score: number;
   recentReservations: number;
+  totalReservations: number;
   isRecommended: boolean;
   thumbnailUrl: string | null;
 }
