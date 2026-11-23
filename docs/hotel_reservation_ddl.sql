@@ -1,6 +1,7 @@
 -- 호텔 예약 시스템 DDL — Supabase(PostgreSQL 15 이상)
 -- 테이블 6개: member, room, closed_date, reservation, attach_file, menu
--- 실행: backend 폴더에서 uv run python -m app.db.init_db (스키마 hotel을 지우고 다시 만든 뒤 이 파일 + dev_seed.sql)
+-- 실행: backend 폴더에서 uv run python -m app.db.init_db (.env의 내 스키마 hotel_<이름>을 지우고 다시 만든 뒤 이 파일 + dev_seed.sql.
+--       공용 hotel은 팀에 알린 뒤 --reset-shared 를 붙였을 때만)
 --       또는 Supabase SQL Editor에 붙여 넣기 (빈 DB에서)
 -- MariaDB 판에서 바뀐 점: AUTO_INCREMENT → IDENTITY, DATETIME → TIMESTAMP, COMMENT → COMMENT ON,
 --   ON UPDATE 없음(updated_at은 코드에서 넣음), closed_date의 UNIQUE에 NULLS NOT DISTINCT(호텔 전체 휴무 중복도 막음)

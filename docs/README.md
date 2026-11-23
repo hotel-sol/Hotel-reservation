@@ -84,7 +84,7 @@ erDiagram
 
 **손님 예약 흐름**: ROOM-001 객실 추천 → RSV-001 객실 예약 → RSV-002 예약 완료 → ADM-003 관리자 승인
 
-DDL은 [`hotel_reservation_ddl.sql`](./hotel_reservation_ddl.sql) 참고 (MySQL / MariaDB).
+DDL은 [`hotel_reservation_ddl.sql`](./hotel_reservation_ddl.sql) 참고 (Supabase PostgreSQL 17, 테이블은 스키마 hotel · hotel_<이름>에 만듦).
 
 ---
 
