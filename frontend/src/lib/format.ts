@@ -11,5 +11,8 @@ export const STATUS_LABEL: Record<ReservationStatus, string> = {
   CANCELED: "취소",
 };
 
+/** 백엔드가 준 파일 경로를 브라우저 주소로. "uploads/rooms/a.jpg" → "/uploads/rooms/a.jpg" (next.config 의 /uploads 프록시) */
+export const fileUrl = (path: string) => (/^(https?:)?\/\//.test(path) || path.startsWith("/") ? path : `/${path}`);
+
 /** 오늘 날짜 YYYY-MM-DD (로컬 기준) */
 export const today = () => new Date().toLocaleDateString("sv-SE");
