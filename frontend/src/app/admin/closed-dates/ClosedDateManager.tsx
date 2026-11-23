@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/client";
 import type { ClosedDate } from "@/types/api";
@@ -16,11 +16,17 @@ export default function ClosedDateManager() {
   const [rows, setRows] = useState<ClosedDate[]>([]);
   const [error, setError] = useState("");
 
-  const load = useCallback(() => {
-    adminApi.closedDates(month).then(setRows).catch((e: ApiError) => setError(e.message));
-  }, [month]);
+  // 저장·승인 뒤 다시 불러올 때 reloadKey 를 올린다
+  const [reloadKey, setReloadKey] = useState(0);
+  const load = () => setReloadKey((k) => k + 1);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    let ignore = false; // 늦게 도착한 이전 요청의 응답은 버린다
+    adminApi.closedDates(month)
+      .then((d) => { if (!ignore) setRows(d); })
+      .catch((e: ApiError) => { if (!ignore) setError(e.message); });
+    return () => { ignore = true; };
+  }, [month, reloadKey]);
 
   async function remove(id: number) {
     if (!confirm("휴무를 해제할까요?")) return;

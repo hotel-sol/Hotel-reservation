@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Pagination from "@/components/Pagination";
 import { adminApi, type RoomInput } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/client";
@@ -17,11 +17,17 @@ export default function RoomManager() {
   const [editing, setEditing] = useState<{ id: number | null; form: RoomInput } | null>(null);
   const [error, setError] = useState("");
 
-  const load = useCallback(() => {
-    adminApi.rooms({ keyword, isActive: isActive || undefined, page }).then(setData).catch((e: ApiError) => setError(e.message));
-  }, [keyword, isActive, page]);
+  // 저장·승인 뒤 다시 불러올 때 reloadKey 를 올린다
+  const [reloadKey, setReloadKey] = useState(0);
+  const load = () => setReloadKey((k) => k + 1);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    let ignore = false; // 늦게 도착한 이전 요청의 응답은 버린다
+    adminApi.rooms({ keyword, isActive: isActive || undefined, page })
+      .then((d) => { if (!ignore) setData(d); })
+      .catch((e: ApiError) => { if (!ignore) setError(e.message); });
+    return () => { ignore = true; };
+  }, [keyword, isActive, page, reloadKey]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();

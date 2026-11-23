@@ -15,8 +15,10 @@ export default function Header() {
   const [menus, setMenus] = useState<MenuItem[]>([]);
 
   useEffect(() => {
-    membersApi.me().then(setMember).catch(() => setMember(null));
-    menusApi.list().then(setMenus).catch(() => setMenus([]));
+    let ignore = false; // 페이지 이동이 빠를 때 이전 응답이 로그인 상태를 덮어쓰지 않게
+    membersApi.me().then((m) => { if (!ignore) setMember(m); }).catch(() => { if (!ignore) setMember(null); });
+    menusApi.list().then((m) => { if (!ignore) setMenus(m); }).catch(() => { if (!ignore) setMenus([]); });
+    return () => { ignore = true; };
   }, [pathname]);
 
   async function logout() {

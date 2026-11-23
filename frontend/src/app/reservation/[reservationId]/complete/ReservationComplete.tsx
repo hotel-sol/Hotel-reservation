@@ -15,7 +15,12 @@ export default function ReservationComplete() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    reservationsApi.get(Number(reservationId)).then(setR).catch((e: ApiError) => setError(e.message));
+    let ignore = false; // 늦게 도착한 이전 요청의 응답은 버린다
+    reservationsApi
+      .get(Number(reservationId))
+      .then((d) => { if (!ignore) setR(d); })
+      .catch((e: ApiError) => { if (!ignore) setError(e.message); });
+    return () => { ignore = true; };
   }, [reservationId]);
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;

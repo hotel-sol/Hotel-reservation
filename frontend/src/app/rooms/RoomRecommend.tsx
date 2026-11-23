@@ -23,6 +23,7 @@ export default function RoomRecommend() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    let ignore = false; // 정렬·페이지를 빠르게 바꿔도 마지막 요청 결과만 반영
     const dated = search.checkIn && search.checkOut;
     roomsApi
       .recommend({
@@ -34,10 +35,12 @@ export default function RoomRecommend() {
         size: 6,
       })
       .then((d) => {
+        if (ignore) return;
         setData(d);
         setError("");
       })
-      .catch((e: ApiError) => setError(e.message));
+      .catch((e: ApiError) => { if (!ignore) setError(e.message); });
+    return () => { ignore = true; };
   }, [search, sort, page]);
 
   const query = search.checkIn && search.checkOut

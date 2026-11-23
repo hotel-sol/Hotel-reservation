@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Pagination from "@/components/Pagination";
 import StatusBadge from "@/components/StatusBadge";
 import { adminApi } from "@/lib/api/admin";
@@ -22,11 +22,17 @@ export default function ReservationManager() {
   const [data, setData] = useState<Page<Reservation> | null>(null);
   const [error, setError] = useState("");
 
-  const load = useCallback(() => {
-    adminApi.reservations({ status, ...filter, page }).then(setData).catch((e: ApiError) => setError(e.message));
-  }, [status, filter, page]);
+  // 저장·승인 뒤 다시 불러올 때 reloadKey 를 올린다
+  const [reloadKey, setReloadKey] = useState(0);
+  const load = () => setReloadKey((k) => k + 1);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    let ignore = false; // 늦게 도착한 이전 요청의 응답은 버린다
+    adminApi.reservations({ status, ...filter, page })
+      .then((d) => { if (!ignore) setData(d); })
+      .catch((e: ApiError) => { if (!ignore) setError(e.message); });
+    return () => { ignore = true; };
+  }, [status, filter, page, reloadKey]);
 
   async function act(r: Reservation, action: "approve" | "cancel") {
     const label = action === "approve" ? "승인" : "취소";
