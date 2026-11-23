@@ -41,6 +41,17 @@ function dayLabel(date: string) {
 
 const shortDate = (date: string) => date.slice(5).replace("-", "/");
 
+// 3C 사유 선택지(화면 선택지). DB에는 "점검 · 보일러" 같은 글자로 저장한다(테이블 변경 없음)
+const REASON_TYPES = ["공사", "점검", "행사", "휴관", "기타"];
+
+const MAX_RANGE_DAYS = 31; // 백엔드 POST /admin/closed-dates/range 와 같은 값
+
+function addDays(date: string, n: number) {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function ClosedDateManager() {
   const [roomId, setRoomId] = useState<number | null>(null); // null = 전체 객실
   const [month, setMonth] = useState(() => today().slice(0, 7));
@@ -48,7 +59,9 @@ export default function ClosedDateManager() {
   const [closed, setClosed] = useState<ClosedDate[]>([]);
   const [counts, setCounts] = useState<ReservationCounts>({});
   const [selected, setSelected] = useState<string | null>(null);
-  const [reason, setReason] = useState("");
+  const [endDate, setEndDate] = useState(""); // 기간 지정 끝 날짜. 비면 하루만
+  const [reasonType, setReasonType] = useState("");
+  const [reason, setReason] = useState(""); // 자세한 내용(기타면 필수)
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -84,12 +97,31 @@ export default function ClosedDateManager() {
   const ownClosed = (date: string) => closed.find((c) => c.closedDate === date && c.roomId === roomId);
   const roomClosedCount = (date: string) => closed.filter((c) => c.closedDate === date && c.roomId !== null).length;
 
+  // 남은 객실 = 사용 중 객실 − 그날 휴무 객실 − 그날 숙박 예약 (전체 객실 화면에서만)
+  // ponytail: 예약 수에 비활성 객실 예약이 섞이면 1~2실 적게 보인다. 정확히 필요하면 백엔드에서 계산.
+  const activeIds = new Set(rooms.filter((r) => r.isActive === "Y").map((r) => r.roomId));
+  const remaining = (date: string) =>
+    hotelClosed(date)
+      ? 0
+      : Math.max(
+          0,
+          activeIds.size -
+            closed.filter((c) => c.closedDate === date && c.roomId !== null && activeIds.has(c.roomId)).length -
+            (counts[date] ?? 0),
+        );
+
+  function pick(date: string | null) {
+    setSelected(date);
+    setEndDate("");
+    setError("");
+  }
+
   function changeScope(next: { month?: string; roomId?: number | null }) {
     if (next.month !== undefined) setMonth(next.month);
     if (next.roomId !== undefined) setRoomId(next.roomId);
-    setSelected(null);
+    pick(null);
+    setReasonType("");
     setReason("");
-    setError("");
   }
 
   async function run(action: () => Promise<unknown>) {
@@ -97,7 +129,9 @@ export default function ClosedDateManager() {
     setError("");
     try {
       await action();
+      setReasonType("");
       setReason("");
+      setEndDate("");
       reload();
     } catch (err) {
       setError((err as ApiError).message);
@@ -106,8 +140,20 @@ export default function ClosedDateManager() {
     }
   }
 
+  const detail = reason.trim();
+  const fullReason = reasonType === "기타" ? detail : detail ? `${reasonType} · ${detail}` : reasonType;
+  const reasonReady = !!reasonType && (reasonType !== "기타" || !!detail);
+
+  const isRange = !!selected && endDate > selected;
+  const inRange = (date: string) => isRange && date > selected! && date <= endDate;
+
   const close = () =>
-    selected && run(() => adminApi.createClosedDate({ roomId, closedDate: selected, reason: reason.trim() }));
+    selected &&
+    run(() =>
+      isRange
+        ? adminApi.createClosedDateRange({ roomId, startDate: selected, endDate, reason: fullReason })
+        : adminApi.createClosedDate({ roomId, closedDate: selected, reason: fullReason }),
+    );
 
   function open(row: ClosedDate) {
     const where = row.roomName ?? "호텔 전체";
@@ -165,16 +211,17 @@ export default function ClosedDateManager() {
               const isClosed = !!hotelClosed(date) || !!ownClosed(date);
               const n = counts[date] ?? 0;
               const roomsOff = roomId === null ? roomClosedCount(date) : 0;
+              const left = roomId === null && rooms.length > 0 && !past ? remaining(date) : null;
               return (
                 <button
                   key={date}
                   type="button"
                   disabled={past}
-                  onClick={() => { setSelected(date); setError(""); }}
+                  onClick={() => pick(date)}
                   className={[
                     "flex h-16 flex-col justify-between rounded-md border p-1.5 text-left text-xs sm:h-20",
-                    isClosed ? "border-red-200 bg-red-50" : "border-slate-200 bg-white",
-                    selected === date ? "ring-2 ring-slate-800" : "",
+                    isClosed ? "border-red-200 bg-red-50" : inRange(date) ? "border-slate-300 bg-slate-100" : "border-slate-200 bg-white",
+                    selected === date || inRange(date) ? "ring-2 ring-slate-800" : "",
                     past ? "cursor-not-allowed opacity-40" : "hover:border-slate-400",
                   ].join(" ")}
                 >
@@ -183,6 +230,9 @@ export default function ClosedDateManager() {
                     {isClosed && <span className="block font-medium text-red-600">휴무</span>}
                     {roomsOff > 0 && <span className="block text-red-500">객실 휴무 {roomsOff}</span>}
                     {n > 0 && <span className="block text-slate-500">예약 {n}</span>}
+                    {left !== null && !isClosed && (
+                      <span className={`block ${left === 0 ? "text-red-500" : "text-emerald-700"}`}>남은 {left}실</span>
+                    )}
                   </span>
                 </button>
               );
@@ -192,6 +242,7 @@ export default function ClosedDateManager() {
             <span><span className="mr-1 inline-block size-3 rounded-sm border border-red-200 bg-red-50 align-middle" />휴무일</span>
             <span><span className="mr-1 inline-block size-3 rounded-sm ring-2 ring-slate-800 align-middle" />선택한 날짜</span>
             <span>&quot;예약 N&quot; = 그날 잡힌 예약 수(대기 + 승인)</span>
+            <span>&quot;남은 N실&quot; = 사용 중 객실 − 휴무 객실 − 예약 (전체 객실 화면)</span>
           </p>
         </div>
 
@@ -226,10 +277,28 @@ export default function ClosedDateManager() {
                   >
                     <label className="block text-xs text-slate-500">
                       휴무 사유
-                      <input className="input mt-1" value={reason} maxLength={200} required
-                        placeholder="예: 연말 시설 점검" onChange={(e) => setReason(e.target.value)} />
+                      <select className="input mt-1" value={reasonType} required
+                        onChange={(e) => setReasonType(e.target.value)}>
+                        <option value="">선택하세요</option>
+                        {REASON_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
                     </label>
-                    <button className="btn-primary w-full" disabled={busy || !reason.trim()}>휴무일로 지정</button>
+                    <label className="block text-xs text-slate-500">
+                      자세한 내용 {reasonType === "기타" ? "(필수)" : "(선택)"}
+                      <input className="input mt-1" value={reason} maxLength={180} required={reasonType === "기타"}
+                        placeholder="예: 보일러 교체" onChange={(e) => setReason(e.target.value)} />
+                    </label>
+                    <label className="block text-xs text-slate-500">
+                      끝 날짜 (기간으로 지정할 때만, 최대 31일)
+                      <input className="input mt-1" type="date" value={endDate} min={selected}
+                        max={addDays(selected, MAX_RANGE_DAYS - 1)} onChange={(e) => setEndDate(e.target.value)} />
+                    </label>
+                    <button className="btn-primary w-full" disabled={busy || !reasonReady}>
+                      {isRange ? `${shortDate(selected)} ~ ${shortDate(endDate)} 휴무로 지정` : "휴무일로 지정"}
+                    </button>
+                    {isRange && (
+                      <p className="text-xs text-slate-500">기간 중 하루라도 예약이나 휴무가 있으면 전부 지정되지 않아요.</p>
+                    )}
                     {sel.count > 0 && (
                       <p className="text-xs text-amber-700">이 날짜에 예약이 있어 지정되지 않아요. 먼저 예약을 취소해 주세요.</p>
                     )}
