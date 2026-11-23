@@ -5,18 +5,29 @@ POST   /admin/closed-dates                          휴무일 지정
 DELETE /admin/closed-dates/{closedDateId}           휴무 해제
 GET    /admin/closed-dates/page                     관리자 화면(roomdate.html)
 
+관리자 확인은 회원 기능(backend/member)의 로그인 세션으로 한다: Depends(require_admin).
+
 다른 앱에 붙일 때: app.include_router(roomdate.router)
-혼자 실행: uvicorn roomdate:app --reload  (backend/roomdate 폴더에서)
+혼자 실행: uvicorn roomdate:app --reload  (backend/roomdate 폴더에서, 로그인 · 상단 메뉴 · 뼈대 페이지까지 함께 뜸)
 """
 import calendar
 import os
+import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pymysql
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+HERE = Path(__file__).parent
+ROOT = HERE.parent.parent
+# ponytail: 팀 메인 앱(패키지 구조)이 생기기 전까지 옆 폴더 모듈을 경로로 불러온다.
+sys.path[:0] = [str(HERE.parent / "member"), str(ROOT / "frontend" / "placeholder")]
+from member import require_admin  # noqa: E402
+from member import router as member_router  # noqa: E402
 
 KST = timezone(timedelta(hours=9))
 LIVE_STATUSES = ("PENDING", "APPROVED")  # 객실을 잡고 있는 예약 (대기 + 승인)
@@ -46,19 +57,6 @@ def get_db():
 
 def fail(status: int, code: str, message: str, **extra):
     raise HTTPException(status, detail={"code": code, "message": message, **extra})
-
-
-def require_admin(x_member_id: int | None = Header(default=None), db=Depends(get_db)) -> int:
-    # ponytail: 임시 인증. 헤더의 회원 번호로 role만 확인한다(위조 가능).
-    # 회원 파트의 로그인(세션/토큰)이 나오면 이 함수만 바꾼다.
-    if x_member_id is None:
-        fail(401, "UNAUTHORIZED", "로그인이 필요합니다.")
-    with db.cursor() as cur:
-        cur.execute("SELECT role FROM member WHERE member_id = %s", (x_member_id,))
-        member = cur.fetchone()
-    if member is None or member["role"] != "ADMIN":
-        fail(403, "FORBIDDEN", "관리자만 사용할 수 있습니다.")
-    return x_member_id
 
 
 def today_kst() -> date:
@@ -99,7 +97,7 @@ router = APIRouter(prefix="/admin/closed-dates", tags=["예약 일자 관리"])
 def list_closed_dates(
     month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$", examples=["2026-12"]),
     room_id: int | None = Query(default=None, alias="roomId"),
-    _admin: int = Depends(require_admin),
+    _admin: dict = Depends(require_admin),
     db=Depends(get_db),
 ):
     """roomId 없음 = 전체 객실: 모든 휴무 + 전체 예약 수.
@@ -142,7 +140,7 @@ def list_closed_dates(
 @router.get("/page", include_in_schema=False)
 def admin_page():
     """ADM-002 화면 본문(①~④). 상단 메뉴(객실 관리 · 예약 관리 · 로그아웃)는 공통 레이아웃 담당이 만든다."""
-    return FileResponse(Path(__file__).with_name("roomdate.html"))
+    return FileResponse(HERE / "roomdate.html")
 
 
 class ClosedDateIn(BaseModel):
@@ -152,7 +150,7 @@ class ClosedDateIn(BaseModel):
 
 
 @router.post("", status_code=201)
-def create_closed_date(body: ClosedDateIn, _admin: int = Depends(require_admin), db=Depends(get_db)):
+def create_closed_date(body: ClosedDateIn, _admin: dict = Depends(require_admin), db=Depends(get_db)):
     reason = body.reason.strip()
     if not reason:
         fail(400, "INVALID_INPUT", "휴무 사유를 입력해 주세요.")
@@ -201,7 +199,7 @@ def create_closed_date(body: ClosedDateIn, _admin: int = Depends(require_admin),
 
 
 @router.delete("/{closed_date_id}", status_code=204)
-def delete_closed_date(closed_date_id: int, _admin: int = Depends(require_admin), db=Depends(get_db)):
+def delete_closed_date(closed_date_id: int, _admin: dict = Depends(require_admin), db=Depends(get_db)):
     with db.cursor() as cur:
         cur.execute("DELETE FROM closed_date WHERE closed_date_id = %s", (closed_date_id,))
         deleted = cur.rowcount
@@ -210,5 +208,12 @@ def delete_closed_date(closed_date_id: int, _admin: int = Depends(require_admin)
         fail(404, "NOT_FOUND", "없는 휴무일입니다.")
 
 
+# 혼자 실행용 앱: 이 화면 + 로그인(회원) + 상단 메뉴 + 나머지 메뉴의 뼈대 페이지.
+# 팀 메인 앱에서는 router만 붙인다.
 app = FastAPI(title="태양의 호텔 · 예약 일자 관리")
 app.include_router(router)
+app.include_router(member_router)
+app.mount("/layout", StaticFiles(directory=ROOT / "frontend" / "layout"), name="layout")
+from placeholder import add_placeholders  # noqa: E402
+
+add_placeholders(app)

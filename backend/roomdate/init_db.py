@@ -1,6 +1,6 @@
 """개발용 DB를 지우고 다시 만든다: python init_db.py [--no-seed]
 
-DB_NAME(기본 hotel)을 DROP 후 dev_schema.sql(팀 DDL 복사본), dev_seed.sql 순서로 실행한다.
+DB_NAME(기본 hotel)을 DROP 후 팀 DDL(docs/hotel_reservation_ddl.sql), dev_seed.sql 순서로 실행한다.
 공용 DB에는 쓰지 말 것(DROP DATABASE를 한다).
 """
 import os
@@ -12,6 +12,7 @@ import pymysql
 from roomdate import connect
 
 HERE = Path(__file__).parent
+TEAM_DDL = HERE.parent.parent / "docs" / "hotel_reservation_ddl.sql"
 
 
 def run_sql_file(cursor, path: Path) -> None:
@@ -29,7 +30,7 @@ def init_db(db_name: str, seed: bool = True) -> None:
             cur.execute(f"DROP DATABASE IF EXISTS `{db_name}`")
             cur.execute(f"CREATE DATABASE `{db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
             cur.execute(f"USE `{db_name}`")
-            run_sql_file(cur, HERE / "dev_schema.sql")
+            run_sql_file(cur, TEAM_DDL)
             if seed:
                 run_sql_file(cur, HERE / "dev_seed.sql")
         conn.commit()

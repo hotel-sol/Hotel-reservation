@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>예약 일자 관리</title>
-<!-- ADM-002 본문(①~④)만. 상단 메뉴(객실 관리 · 예약 일자 관리 · 예약 관리 · 로그아웃)는 공통 레이아웃 담당. -->
+<!-- ADM-002 관리자) 예약 일자 관리. 상단 메뉴는 공통 frontend/layout/layout.js (관리자만 들어옴). -->
 <style>
   body { margin: 0; font-family: system-ui, "Malgun Gothic", sans-serif; color: #1f2937; background: #fff; }
   main { display: grid; grid-template-columns: 1fr 260px; gap: 24px; padding: 24px 28px; max-width: 980px; }
@@ -46,6 +46,7 @@
 </style>
 </head>
 <body>
+<header data-hotel-header="admin"></header>
 <main>
   <section>
     <div class="toolbar">
@@ -83,8 +84,7 @@
 </main>
 
 <script>
-// ponytail: 임시 인증. 서버 require_admin과 같이, 로그인이 나오면 세션/토큰으로 바꾼다.
-const AUTH = { "X-Member-Id": "1" };
+// 로그인은 회원 기능의 세션 쿠키로 확인한다(같은 사이트라 fetch가 자동으로 보냄).
 const API = "/admin/closed-dates";
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -101,10 +101,13 @@ let data = { closedDates: [], reservationCounts: {}, rooms: [] };
 async function call(method, url, body) {
   const res = await fetch(url, {
     method,
-    headers: { ...AUTH, ...(body ? { "Content-Type": "application/json" } : {}) },
+    headers: body ? { "Content-Type": "application/json" } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.ok) return res.status === 204 ? null : res.json();
+  if (res.status === 401) {   // 로그인이 풀렸으면 로그인 화면으로, 로그인 뒤 이 화면으로 돌아옴
+    location.href = `/login?next=${encodeURIComponent(location.pathname)}`;
+  }
   const err = await res.json().catch(() => ({}));
   throw new Error(err.detail?.message || "요청을 처리하지 못했습니다.");
 }
@@ -215,5 +218,6 @@ $("prev").onclick = () => { month === 1 ? (year--, month = 12) : month--; load()
 $("next").onclick = () => { month === 12 ? (year++, month = 1) : month++; load(); };
 load();
 </script>
+<script src="/layout/layout.js"></script>
 </body>
 </html>

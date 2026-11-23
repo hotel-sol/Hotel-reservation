@@ -14,9 +14,12 @@ from fastapi.testclient import TestClient
 import roomdate as app_module
 from roomdate import connect
 from init_db import init_db
+from member import SESSION_COOKIE, make_session
 
-ADMIN = {"X-Member-Id": "1"}
-GUEST = {"X-Member-Id": "2"}
+# 시드(dev_seed.sql)의 1번 = ADMIN, 2번 = USER. 로그인 화면 대신 회원 기능과 같은 방식으로 세션 쿠키를 만든다.
+SEED_PASSWORD = "not-a-real-hash"
+ADMIN = {"Cookie": f"{SESSION_COOKIE}={make_session(1, SEED_PASSWORD)}"}
+GUEST = {"Cookie": f"{SESSION_COOKIE}={make_session(2, SEED_PASSWORD)}"}
 client = TestClient(app_module.app)
 TODAY = app_module.today_kst()
 D1 = TODAY + timedelta(days=400)  # 시드(2026-12)와 겹치지 않는 미래 날짜
@@ -90,6 +93,7 @@ def test_input_and_permission_errors():
     assert post(D1, room_id=999).status_code == 404
     assert post(D1, headers=GUEST).status_code == 403
     assert post(D1, headers={}).status_code == 401
+    assert post(D1, headers={"X-Member-Id": "1"}).status_code == 401   # 예전 임시 헤더는 더 이상 통하지 않음
 
 
 def test_screen_scenario_close_dec_31():
@@ -119,7 +123,11 @@ def test_screen_scenario_close_dec_31():
         "이 날짜에 예약 1건이 있습니다. 먼저 예약을 취소해 주세요."
 
 
-def test_admin_page_is_served():
+def test_admin_page_is_served_with_common_header():
     r = client.get("/admin/closed-dates/page")
     assert r.status_code == 200
-    assert "휴무일로 지정" in r.text
+    assert "휴무일로 지정" in r.text and "준비 중" not in r.text   # 뼈대 페이지가 아니라 진짜 화면
+    assert 'data-hotel-header="admin"' in r.text and "/layout/layout.js" in r.text
+    assert client.get("/layout/layout.js").status_code == 200
+    assert "준비 중" in client.get("/admin/rooms/page").text        # 다른 메뉴는 뼈대 페이지
+    assert client.get("/login").status_code == 200
