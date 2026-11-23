@@ -24,3 +24,35 @@ cp .env.example .env.local
 npm install
 npm run dev                          # http://localhost:3000
 ```
+
+## 브랜치 규칙 (Git Flow 간소화, 11-23)
+
+이틀짜리 해커톤이라 `release/*` · `hotfix/*`는 쓰지 않고 세 가지만 씁니다.
+
+| 브랜치 | 용도 | 어디서 만들고 어디로 합치나 |
+|---|---|---|
+| `main` | 제출 · 시연 버전 | 11-25 기능 동결 때 `dev` → `main` PR 한 번 |
+| `dev` | 팀 통합 개발 | 모든 기능 PR이 여기로 |
+| `feature/<파트>-<내용>` | 각자 작업 (예: `feature/roomdate-calendar`) | `dev`에서 만들고 `dev`로 PR |
+
+```bash
+git switch dev && git pull                     # 항상 최신 dev에서 시작
+git switch -c feature/roomdate-calendar        # 내 작업 브랜치
+# ... 작업 · 커밋 ...
+git push -u origin feature/roomdate-calendar
+gh pr create --base dev                        # PR은 dev로 (main 아님)
+```
+
+- **main · dev에 직접 push하지 않습니다.** 모든 변경은 PR로 합칩니다.
+- PR 전에 `backend`에서 `uv run pytest`, `frontend`에서 `npm run build`가 통과해야 합니다.
+- 오래 걸리는 작업이면 중간에 `git pull origin dev`로 최신 dev를 받아 충돌을 일찍 풉니다.
+
+지켜지는지 확인하기:
+
+```bash
+git fetch --prune && git branch -r                          # origin/dev, origin/feature/... 가 보이는지
+gh pr list --base dev                                       # dev로 간 PR
+gh pr list --base main --state all                          # main으로 간 PR (동결 때 1건만이어야 함)
+git log origin/main --first-parent --no-merges --oneline    # main에 PR 없이 올라간 커밋 (11-23 이전 것 외에 새로 생기면 안 됨)
+git log --graph --oneline --all -30                         # 브랜치 모양 (GitHub: Insights → Network)
+```
