@@ -31,10 +31,12 @@
     <div class="msg" id="msg" role="alert"></div>
   </form>
   <p class="alt">아직 회원이 아니세요? <a href="/signup">회원가입</a></p>
+  <p class="alt"><a href="/password-reset">비밀번호를 잊으셨나요?</a></p>
 </main>
 <script>
   const params = new URLSearchParams(location.search);
   if (params.has("joined")) { msg.textContent = "가입이 끝났습니다. 로그인해 주세요."; msg.className = "msg ok"; }
+  if (params.has("reset")) { msg.textContent = "비밀번호를 바꿨습니다. 새 비밀번호로 로그인해 주세요."; msg.className = "msg ok"; }
 
   // 로그인 뒤 돌아갈 곳: 같은 사이트 주소만 허용(다른 사이트로 튕기기 방지).
   const next = params.get("next");
