@@ -56,10 +56,14 @@ export interface Reservation {
 
 export interface ClosedDate {
   closedDateId: number;
-  roomId: number | null;
+  roomId: number | null; // null = 호텔 전체 휴무
+  roomName: string | null;
   closedDate: string;
   reason: string | null;
 }
+
+/** 날짜별 예약 수(대기 + 승인). 0건인 날은 빠진다. 예: {"2026-12-15": 1} */
+export type ReservationCounts = Record<string, number>;
 
 export interface MenuItem {
   menuId: number;

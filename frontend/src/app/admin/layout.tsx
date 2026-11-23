@@ -3,7 +3,7 @@ import AdminGuard from "./AdminGuard";
 
 const LINKS = [
   { href: "/admin/rooms", label: "객실 관리" },
-  { href: "/admin/closed-dates", label: "휴무일 관리" },
+  { href: "/admin/closed-dates", label: "예약 일자 관리" },
   { href: "/admin/reservations", label: "예약 관리" },
 ];
 

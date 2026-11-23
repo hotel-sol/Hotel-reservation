@@ -1,4 +1,4 @@
-import type { ClosedDate, Page, Reservation, ReservationStatus, Room } from "@/types/api";
+import type { ClosedDate, Page, Reservation, ReservationCounts, ReservationStatus, Room } from "@/types/api";
 import { api } from "./client";
 
 export type RoomInput = Pick<Room, "roomName" | "roomType" | "maxGuest" | "price" | "description">;
@@ -12,9 +12,12 @@ export const adminApi = {
   setRoomActive: (roomId: number, isActive: "Y" | "N") =>
     api<Room>(`/admin/rooms/${roomId}/status`, { method: "PATCH", json: { isActive } }),
 
-  // ADM-002 휴무일 관리
+  // ADM-002 예약 일자(휴무일) 관리. roomId 없음 = 모든 휴무, 있음 = 호텔 전체 휴무 + 그 방 휴무
   closedDates: (month: string, roomId?: number) => api<ClosedDate[]>("/admin/closed-dates", { query: { month, roomId } }),
-  createClosedDate: (body: { roomId: number | null; closedDate: string; reason?: string }) =>
+  reservationCounts: (month: string, roomId?: number) =>
+    api<ReservationCounts>("/admin/closed-dates/reservation-counts", { query: { month, roomId } }),
+  // 400 PAST_DATE · 409 ALREADY_CLOSED · 409 CLOSED_DATE_CONFLICT(그날 예약 있음)
+  createClosedDate: (body: { roomId: number | null; closedDate: string; reason: string }) =>
     api<ClosedDate>("/admin/closed-dates", { method: "POST", json: body }),
   deleteClosedDate: (id: number) => api<void>(`/admin/closed-dates/${id}`, { method: "DELETE" }),
 

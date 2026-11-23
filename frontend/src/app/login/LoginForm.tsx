@@ -35,6 +35,8 @@ export default function LoginForm() {
       <button className="btn-primary w-full">로그인</button>
       <p className="text-center text-sm text-slate-500">
         계정이 없나요? <Link href="/signup" className="text-blue-600">회원가입</Link>
+        <span className="mx-2 text-slate-300">|</span>
+        <Link href="/password-reset" className="text-blue-600">비밀번호 찾기</Link>
       </p>
     </form>
   );

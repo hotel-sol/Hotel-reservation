@@ -3,55 +3,263 @@
 import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/client";
-import type { ClosedDate } from "@/types/api";
+import { today } from "@/lib/format";
+import type { ClosedDate, ReservationCounts, Room } from "@/types/api";
 
 /**
- * TODO(ADM-002)
- *  - 객실 선택 드롭다운 (adminApi.rooms)
- *  - 월 달력: 날짜별 휴무 여부 + 예약 수, 지난 날짜 선택 불가
- *  - 날짜 클릭 → 휴무 지정 (POST /admin/closed-dates, 백엔드 구현 필요)
+ * ADM-002 예약 일자(휴무일) 관리
+ *  ① 객실 선택 · 월 이동   "전체 객실" = 호텔 전체 휴무, 특정 객실 = 그 방만 휴무
+ *  ② 달력                  날짜별 휴무 여부 + 예약 수(대기 + 승인). 지난 날짜는 누를 수 없다
+ *  ③ 휴무 지정 / 해제      예약이 있는 날은 백엔드가 409 로 막는다
+ *  ④ 이번 달 휴무일 목록   바로 해제
  */
-export default function ClosedDateManager() {
-  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [rows, setRows] = useState<ClosedDate[]>([]);
-  const [error, setError] = useState("");
+const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 
-  // 저장·승인 뒤 다시 불러올 때 reloadKey 를 올린다
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** "2026-12" → 그달 날짜 칸 (앞쪽 빈칸은 null) */
+function monthCells(month: string): (string | null)[] {
+  const [y, m] = month.split("-").map(Number);
+  const firstWeekday = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return [
+    ...Array<null>(firstWeekday).fill(null),
+    ...Array.from({ length: days }, (_, i) => `${month}-${pad(i + 1)}`),
+  ];
+}
+
+function shiftMonth(month: string, delta: number) {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}`;
+}
+
+function dayLabel(date: string) {
+  const d = new Date(`${date}T00:00:00Z`);
+  return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 (${WEEK[d.getUTCDay()]})`;
+}
+
+const shortDate = (date: string) => date.slice(5).replace("-", "/");
+
+export default function ClosedDateManager() {
+  const [roomId, setRoomId] = useState<number | null>(null); // null = 전체 객실
+  const [month, setMonth] = useState(() => today().slice(0, 7));
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [closed, setClosed] = useState<ClosedDate[]>([]);
+  const [counts, setCounts] = useState<ReservationCounts>({});
+  const [selected, setSelected] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  // 지정 · 해제 뒤 다시 불러올 때 reloadKey 를 올린다
   const [reloadKey, setReloadKey] = useState(0);
-  const load = () => setReloadKey((k) => k + 1);
+  const reload = () => setReloadKey((k) => k + 1);
 
   useEffect(() => {
-    let ignore = false; // 늦게 도착한 이전 요청의 응답은 버린다
-    adminApi.closedDates(month)
-      .then((d) => { if (!ignore) setRows(d); })
+    let ignore = false;
+    adminApi
+      .rooms({ size: 100 })
+      .then((p) => { if (!ignore) setRooms(p.items); })
       .catch((e: ApiError) => { if (!ignore) setError(e.message); });
     return () => { ignore = true; };
-  }, [month, reloadKey]);
+  }, []);
 
-  async function remove(id: number) {
-    if (!confirm("휴무를 해제할까요?")) return;
-    await adminApi.deleteClosedDate(id);
-    load();
+  useEffect(() => {
+    let ignore = false; // 월 · 객실을 빠르게 바꿔도 마지막 조회 결과만 반영
+    const id = roomId ?? undefined;
+    Promise.all([adminApi.closedDates(month, id), adminApi.reservationCounts(month, id)])
+      .then(([c, n]) => {
+        if (ignore) return;
+        setClosed(c);
+        setCounts(n);
+      })
+      .catch((e: ApiError) => { if (!ignore) setError(e.message); });
+    return () => { ignore = true; };
+  }, [month, roomId, reloadKey]);
+
+  const todayStr = today();
+  const hotelClosed = (date: string) => closed.find((c) => c.closedDate === date && c.roomId === null);
+  // 지금 고른 범위(전체 객실 / 그 방)에 직접 지정된 휴무 — 해제 대상
+  const ownClosed = (date: string) => closed.find((c) => c.closedDate === date && c.roomId === roomId);
+  const roomClosedCount = (date: string) => closed.filter((c) => c.closedDate === date && c.roomId !== null).length;
+
+  function changeScope(next: { month?: string; roomId?: number | null }) {
+    if (next.month !== undefined) setMonth(next.month);
+    if (next.roomId !== undefined) setRoomId(next.roomId);
+    setSelected(null);
+    setReason("");
+    setError("");
   }
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+      setReason("");
+      reload();
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const close = () =>
+    selected && run(() => adminApi.createClosedDate({ roomId, closedDate: selected, reason: reason.trim() }));
+
+  function open(row: ClosedDate) {
+    const where = row.roomName ?? "호텔 전체";
+    if (!confirm(`${shortDate(row.closedDate)} ${where} 휴무를 해제할까요?`)) return;
+    run(() => adminApi.deleteClosedDate(row.closedDateId));
+  }
+
+  const sel = selected
+    ? { own: ownClosed(selected), hotel: hotelClosed(selected), count: counts[selected] ?? 0 }
+    : null;
+  // 방을 골랐는데 그날 호텔 전체 휴무면 방 휴무는 따로 지정할 수 없다(ALREADY_CLOSED)
+  const blockedByHotel = roomId !== null && !!sel?.hotel;
 
   return (
     <div className="space-y-4">
-      <input type="month" className="input max-w-48" value={month} onChange={(e) => setMonth(e.target.value)} />
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="card">
-        <h2 className="mb-3 font-semibold">이번 달 호텔 전체 휴무일</h2>
-        {rows.length === 0 ? (
-          <p className="text-sm text-slate-400">휴무일이 없습니다.</p>
-        ) : (
-          <ul className="divide-y divide-slate-100 text-sm">
-            {rows.map((r) => (
-              <li key={r.closedDateId} className="flex items-center justify-between py-2">
-                <span>{r.closedDate} <span className="text-slate-500">{r.reason}</span></span>
-                <button className="btn-outline px-2 py-1" onClick={() => remove(r.closedDateId)}>해제</button>
-              </li>
+      {/* ① 객실 선택 · 월 이동 */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          객실
+          <select
+            className="input w-48"
+            value={roomId ?? ""}
+            onChange={(e) => changeScope({ roomId: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">전체 객실 (호텔 전체 휴무)</option>
+            {rooms.map((r) => (
+              <option key={r.roomId} value={r.roomId}>
+                {r.roomName}
+                {r.isActive === "N" ? " (비활성)" : ""}
+              </option>
             ))}
-          </ul>
-        )}
+          </select>
+        </label>
+        <div className="flex items-center gap-2 font-semibold">
+          <button type="button" className="btn-outline px-2 py-1" aria-label="이전 달"
+            onClick={() => changeScope({ month: shiftMonth(month, -1) })}>‹</button>
+          <span className="w-28 text-center">{month.replace("-", "년 ")}월</span>
+          <button type="button" className="btn-outline px-2 py-1" aria-label="다음 달"
+            onClick={() => changeScope({ month: shiftMonth(month, 1) })}>›</button>
+        </div>
+      </div>
+
+      {error && <p className="whitespace-pre-line text-sm text-red-600">{error}</p>}
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+        {/* ② 달력 */}
+        <div>
+          <div className="grid grid-cols-7 gap-1 text-center text-xs text-slate-500">
+            {WEEK.map((w) => <div key={w} className="py-1">{w}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {monthCells(month).map((date, i) => {
+              if (!date) return <div key={`blank-${i}`} />;
+              const past = date < todayStr;
+              const isClosed = !!hotelClosed(date) || !!ownClosed(date);
+              const n = counts[date] ?? 0;
+              const roomsOff = roomId === null ? roomClosedCount(date) : 0;
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  disabled={past}
+                  onClick={() => { setSelected(date); setError(""); }}
+                  className={[
+                    "flex h-16 flex-col justify-between rounded-md border p-1.5 text-left text-xs sm:h-20",
+                    isClosed ? "border-red-200 bg-red-50" : "border-slate-200 bg-white",
+                    selected === date ? "ring-2 ring-slate-800" : "",
+                    past ? "cursor-not-allowed opacity-40" : "hover:border-slate-400",
+                  ].join(" ")}
+                >
+                  <span className="text-sm">{Number(date.slice(8))}</span>
+                  <span className="space-y-0.5">
+                    {isClosed && <span className="block font-medium text-red-600">휴무</span>}
+                    {roomsOff > 0 && <span className="block text-red-500">객실 휴무 {roomsOff}</span>}
+                    {n > 0 && <span className="block text-slate-500">예약 {n}</span>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
+            <span><span className="mr-1 inline-block size-3 rounded-sm border border-red-200 bg-red-50 align-middle" />휴무일</span>
+            <span><span className="mr-1 inline-block size-3 rounded-sm ring-2 ring-slate-800 align-middle" />선택한 날짜</span>
+            <span>&quot;예약 N&quot; = 그날 잡힌 예약 수(대기 + 승인)</span>
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {/* ③ 휴무 지정 / 해제 */}
+          <div className="card space-y-3 text-sm">
+            {!selected || !sel ? (
+              <p className="text-slate-500">달력에서 날짜를 고르세요. 지난 날짜는 고를 수 없어요.</p>
+            ) : (
+              <>
+                <div>
+                  <p className="font-semibold">{dayLabel(selected)}</p>
+                  <p className="mt-1 text-slate-500">
+                    {roomId === null ? "이 날 예약" : `${rooms.find((r) => r.roomId === roomId)?.roomName ?? ""} 예약`} {sel.count}건
+                  </p>
+                </div>
+                {sel.own ? (
+                  <>
+                    <p className="rounded-md bg-red-50 px-3 py-2 text-red-700">휴무 · {sel.own.reason ?? "사유 없음"}</p>
+                    <button type="button" className="btn-outline w-full" disabled={busy} onClick={() => open(sel.own!)}>
+                      휴무 해제
+                    </button>
+                  </>
+                ) : blockedByHotel ? (
+                  <p className="rounded-md bg-red-50 px-3 py-2 text-red-700">
+                    호텔 전체 휴무일이에요 ({sel.hotel!.reason ?? "사유 없음"}). 해제는 &quot;전체 객실&quot;에서 하세요.
+                  </p>
+                ) : (
+                  <form
+                    className="space-y-3"
+                    onSubmit={(e) => { e.preventDefault(); close(); }}
+                  >
+                    <label className="block text-xs text-slate-500">
+                      휴무 사유
+                      <input className="input mt-1" value={reason} maxLength={200} required
+                        placeholder="예: 연말 시설 점검" onChange={(e) => setReason(e.target.value)} />
+                    </label>
+                    <button className="btn-primary w-full" disabled={busy || !reason.trim()}>휴무일로 지정</button>
+                    {sel.count > 0 && (
+                      <p className="text-xs text-amber-700">이 날짜에 예약이 있어 지정되지 않아요. 먼저 예약을 취소해 주세요.</p>
+                    )}
+                  </form>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* ④ 이번 달 휴무일 목록 */}
+          <div className="card text-sm">
+            <h2 className="mb-2 font-semibold">이번 달 휴무일</h2>
+            {closed.length === 0 ? (
+              <p className="text-slate-400">휴무일이 없습니다.</p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {closed.map((c) => (
+                  <li key={c.closedDateId} className="flex items-center justify-between gap-2 py-2">
+                    <span>
+                      {shortDate(c.closedDate)} {c.roomName ?? "전체"}
+                      <span className="text-slate-500"> · {c.reason ?? "사유 없음"}</span>
+                    </span>
+                    <button type="button" className="shrink-0 text-red-600 hover:underline disabled:opacity-50"
+                      disabled={busy} onClick={() => open(c)}>해제</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
