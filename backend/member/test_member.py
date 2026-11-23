@@ -210,6 +210,8 @@ def test_admin_cannot_withdraw_and_create_admin():
     signup("guest02")
     assert create_admin.create_admin("guest02", "무시됨", "promoted1") == "promoted"
     assert login("guest02", "promoted1").json()["role"] == "ADMIN"
+    with pytest.raises(ValueError):
+        create_admin.create_admin(create_admin.DEV_ADMIN_ID, "관리자", "short")   # 8자 미만 거부
 
 
 def test_pages_and_get_logout():
