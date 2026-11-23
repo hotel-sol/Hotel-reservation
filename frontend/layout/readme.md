@@ -6,8 +6,8 @@
 
 | 로그인 상태 | 메뉴 |
 |---|---|
-| `ADMIN` (관리자) | HOTEL 관리자 · 객실 관리 · 예약 일자 관리 · 예약 관리 · 로그아웃 |
-| `USER` (회원) | HOTEL · 객실 추천 · 내 예약 · 로그아웃 |
+| `ADMIN` (관리자) | HOTEL 관리자 · 객실 관리 · 예약 일자 관리 · 예약 관리 · OOO님 · 로그아웃 |
+| `USER` (회원) | HOTEL · 객실 추천 · 내 예약 · OOO님 · 로그아웃 |
 | 로그인 안 함 | HOTEL · 객실 추천 · 로그인 · 회원가입 |
 
 ## 붙이는 법
@@ -30,7 +30,7 @@ app.mount("/layout", StaticFiles(directory="frontend/layout"), name="layout")
 - 로그인 상태: `200 {"memberId": 1, "loginId": "admin", "name": "관리자", "role": "ADMIN"}` (`role`은 `member.role` 그대로)
 - 로그인 안 함: `401`
 - 로그인 정보는 세션 쿠키로 갑니다(같은 주소라 `fetch`가 자동으로 보냄).
-- 링크: 로그인 `/login`, 회원가입 `/signup`, 로그아웃 `/logout` (모두 `backend/member`가 제공)
+- 링크: 로그인 `/login`, 회원가입 `/signup`, 내 정보 `/mypage`("OOO님"), 로그아웃 `/logout` (모두 `backend/member`가 제공)
 
 ## 미리보기
 ```

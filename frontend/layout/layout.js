@@ -1,8 +1,8 @@
 /* 공통 상단 메뉴(페이지 분할). 화면설계서 ADM-001~003, ROOM-001의 "HOTEL" 머리줄.
  *
  * 로그인한 사람의 member.role로 메뉴를 고른다.
- *   ADMIN      → HOTEL 관리자 · 객실 관리 · 예약 일자 관리 · 예약 관리 · 로그아웃
- *   USER       → HOTEL · 객실 추천 · 내 예약 · 로그아웃
+ *   ADMIN      → HOTEL 관리자 · 객실 관리 · 예약 일자 관리 · 예약 관리 · OOO님 · 로그아웃
+ *   USER       → HOTEL · 객실 추천 · 내 예약 · OOO님 · 로그아웃   (OOO님 → 내 정보 /mypage)
  *   로그인 안 함 → HOTEL · 객실 추천 · 로그인 · 회원가입
  *
  * 쓰는 법: 페이지 맨 위에 두 줄.
@@ -15,6 +15,7 @@
   const ME_URL = "/members/me";
   const LOGIN_URL = "/login";
   const SIGNUP_URL = "/signup";
+  const MYPAGE_URL = "/mypage";
   const LOGOUT_URL = "/logout";
 
   // ponytail: 메뉴를 코드에 고정. MENU 테이블(공통, role 칸)과 같은 내용이고, 메뉴 API가 생기면 거기서 받아 온다.
@@ -54,14 +55,16 @@
   `;
   document.head.append(style);
 
-  async function currentRole() {
+  const GUEST = { role: "GUEST", name: "" };
+
+  async function currentMember() {
     try {
       const res = await fetch(ME_URL, { credentials: "same-origin" });
-      if (!res.ok) return "GUEST";                 // 401 = 로그인 안 함
+      if (!res.ok) return GUEST;                   // 401 = 로그인 안 함
       const me = await res.json();
-      return me.role === "ADMIN" ? "ADMIN" : "USER";
+      return { role: me.role === "ADMIN" ? "ADMIN" : "USER", name: me.name };
     } catch {
-      return "GUEST";                              // 서버에 못 닿으면 로그인 안 한 것으로 본다
+      return GUEST;                                // 서버에 못 닿으면 로그인 안 한 것으로 본다
     }
   }
 
@@ -73,7 +76,7 @@
     return a;
   };
 
-  function render(header, role) {
+  function render(header, { role, name }) {
     const menu = MENUS[role];
     header.className = "hotel-header";
 
@@ -88,7 +91,8 @@
       nav.append(link("로그인", LOGIN_URL, location.pathname === LOGIN_URL),
                  link("회원가입", SIGNUP_URL, location.pathname === SIGNUP_URL));
     } else {
-      nav.append(link("로그아웃", LOGOUT_URL, false));
+      nav.append(link(`${name}님`, MYPAGE_URL, location.pathname === MYPAGE_URL),   // 내 정보
+                 link("로그아웃", LOGOUT_URL, false));
     }
     header.replaceChildren(logo, nav);
   }
@@ -96,12 +100,12 @@
   (async () => {
     const headers = document.querySelectorAll("[data-hotel-header]");
     if (!headers.length) return;
-    const role = await currentRole();
+    const member = await currentMember();
     const adminOnly = [...headers].some((h) => h.dataset.hotelHeader === "admin");
-    if (adminOnly && role !== "ADMIN") {
+    if (adminOnly && member.role !== "ADMIN") {
       location.replace(`${LOGIN_URL}?next=${encodeURIComponent(location.pathname)}`);
       return;
     }
-    headers.forEach((h) => render(h, role));
+    headers.forEach((h) => render(h, member));
   })();
 })();
