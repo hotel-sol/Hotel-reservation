@@ -76,7 +76,7 @@ export default function RoomRecommend() {
       </form>
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">{data ? `${data.total}개 객실` : "불러오는 중…"}</p>
+        <p className="text-sm text-slate-500">{data ? `${search.checkIn && search.checkOut ? "예약 가능한 객실" : "객실"} ${data.total}개` : "불러오는 중…"}</p>
         <div className="flex gap-1">
           {SORTS.map((s) => (
             <button key={s.value} onClick={() => { setSort(s.value); setPage(1); }}

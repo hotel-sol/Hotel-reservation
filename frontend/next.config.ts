@@ -7,7 +7,11 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   async rewrites() {
-    return [{ source: "/api/:path*", destination: `${BACKEND_URL}/api/:path*` }];
+    return [
+      { source: "/api/:path*", destination: `${BACKEND_URL}/api/:path*` },
+      // 객실 사진(attach_file.saved_path = "uploads/...") — 백엔드가 /uploads 를 정적 파일로 내주면 그대로 보인다
+      { source: "/uploads/:path*", destination: `${BACKEND_URL}/uploads/:path*` },
+    ];
   },
 };
 

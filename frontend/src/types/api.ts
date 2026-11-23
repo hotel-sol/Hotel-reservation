@@ -33,9 +33,11 @@ export interface Room {
 
 export interface RecommendRoom extends Room {
   score: number;
-  recentReservations: number;
+  recentReservations: number; // 최근 30일 예약 수(대기 + 승인)
+  // 전체 예약 수(인기순 기준). feature/rooms-recommend 백엔드부터 내려와서, 그 전 서버에서는 없을 수 있다
+  totalReservations?: number;
   isRecommended: boolean;
-  thumbnailUrl: string | null;
+  thumbnailUrl: string | null; // 대표 사진 경로 (예: "uploads/rooms/a.jpg"), 없으면 null
 }
 
 export interface Reservation {
