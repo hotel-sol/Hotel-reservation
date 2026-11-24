@@ -127,7 +127,8 @@ export default function RoomManager() {
         </select>
         <button className="btn-primary ml-auto" onClick={() => startEdit()}>+ 객실 추가</button>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {/* 등록 · 수정 칸이 열려 있으면 오류는 칸 안 [수정] 버튼 위에 보여 준다 */}
+      {error && !editing && <p className="text-sm text-red-600">{error}</p>}
 
       {editing && f && (
         <form onSubmit={save} className="card grid gap-3 sm:grid-cols-2">
@@ -182,9 +183,12 @@ export default function RoomManager() {
           <Field label="설명" className="sm:col-span-2" hint="손님 추천 카드에 앞 2줄이 보여요. 층 · 전망 · 침대 · 면적을 앞에 써 주세요. (선택, 최대 1000자)">
             <textarea className="input" maxLength={1000} placeholder="예: 12층 · 리버뷰 · 킹 · 55㎡. 휴식 공간을 갖춘 55㎡ 상위 객실" value={f.description ?? ""} onChange={(e) => setF({ description: e.target.value })} />
           </Field>
+          {error && (
+            <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p>
+          )}
           <div className="flex gap-2 sm:col-span-2">
             <button className="btn-primary">{editing.id ? "수정" : "등록"}</button>
-            <button type="button" className="btn-outline" onClick={() => setEditing(null)}>취소</button>
+            <button type="button" className="btn-outline" onClick={() => { setEditing(null); setError(""); }}>취소</button>
           </div>
         </form>
       )}
