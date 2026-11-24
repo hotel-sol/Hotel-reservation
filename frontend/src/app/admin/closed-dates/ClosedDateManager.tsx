@@ -9,8 +9,8 @@ import type { ClosedDate, ReservationCounts, Room } from "@/types/api";
 /**
  * ADM-002 예약 일자(휴무일) 관리
  *  ① 객실 선택 · 월 이동   "전체 객실" = 호텔 전체 휴무, 특정 객실 = 그 방만 휴무
- *  ② 달력                  날짜별 휴무 여부 + 예약 수(대기 + 승인). 지난 날짜는 누를 수 없다
- *  ③ 휴무 지정 / 해제      예약이 있는 날은 백엔드가 409 로 막는다
+ *  ② 달력                  날짜별 휴무 여부 + 예약 수(대기 + 승인). Shift+클릭 = 끝 날짜. 지난 날짜도 지정 · 해제 가능
+ *  ③ 휴무 지정 / 해제      예약이 있는 날은 백엔드가 409 로 막는다. 끝 날짜를 고르면 기간 지정 · 기간 해제
  *  ④ 이번 달 휴무일 목록   바로 해제
  */
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
@@ -58,6 +58,7 @@ export default function ClosedDateManager() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [closed, setClosed] = useState<ClosedDate[]>([]);
   const [counts, setCounts] = useState<ReservationCounts>({});
+  const [left, setLeft] = useState<Record<string, number>>({}); // 날짜별 남은 객실 수(전체 객실 화면)
   const [selected, setSelected] = useState<string | null>(null);
   const [endDate, setEndDate] = useState(""); // 기간 지정 끝 날짜. 비면 하루만
   const [reasonType, setReasonType] = useState("");
@@ -81,11 +82,16 @@ export default function ClosedDateManager() {
   useEffect(() => {
     let ignore = false; // 월 · 객실을 빠르게 바꿔도 마지막 조회 결과만 반영
     const id = roomId ?? undefined;
-    Promise.all([adminApi.closedDates(month, id), adminApi.reservationCounts(month, id)])
-      .then(([c, n]) => {
+    Promise.all([
+      adminApi.closedDates(month, id),
+      adminApi.reservationCounts(month, id),
+      roomId === null ? adminApi.availableRooms(month) : Promise.resolve({}),
+    ])
+      .then(([c, n, a]) => {
         if (ignore) return;
         setClosed(c);
         setCounts(n);
+        setLeft(a);
       })
       .catch((e: ApiError) => { if (!ignore) setError(e.message); });
     return () => { ignore = true; };
@@ -97,23 +103,18 @@ export default function ClosedDateManager() {
   const ownClosed = (date: string) => closed.find((c) => c.closedDate === date && c.roomId === roomId);
   const roomClosedCount = (date: string) => closed.filter((c) => c.closedDate === date && c.roomId !== null).length;
 
-  // 남은 객실 = 사용 중 객실 − 그날 휴무 객실 − 그날 숙박 예약 (전체 객실 화면에서만)
-  // ponytail: 예약 수에 비활성 객실 예약이 섞이면 1~2실 적게 보인다. 정확히 필요하면 백엔드에서 계산.
-  const activeIds = new Set(rooms.filter((r) => r.isActive === "Y").map((r) => r.roomId));
-  const remaining = (date: string) =>
-    hotelClosed(date)
-      ? 0
-      : Math.max(
-          0,
-          activeIds.size -
-            closed.filter((c) => c.closedDate === date && c.roomId !== null && activeIds.has(c.roomId)).length -
-            (counts[date] ?? 0),
-        );
-
   function pick(date: string | null) {
     setSelected(date);
     setEndDate("");
     setError("");
+  }
+
+  // Shift+클릭: 시작 날짜를 고른 상태에서 뒤 날짜를 누르면 끝 날짜로
+  function clickDay(date: string, shift: boolean) {
+    if (shift && selected && date > selected) {
+      setEndDate(date);
+      setError("");
+    } else pick(date);
   }
 
   function changeScope(next: { month?: string; roomId?: number | null }) {
@@ -154,6 +155,13 @@ export default function ClosedDateManager() {
         ? adminApi.createClosedDateRange({ roomId, startDate: selected, endDate, reason: fullReason })
         : adminApi.createClosedDate({ roomId, closedDate: selected, reason: fullReason }),
     );
+
+  function openRange() {
+    if (!selected || !isRange) return;
+    const where = roomId === null ? "호텔 전체" : rooms.find((r) => r.roomId === roomId)?.roomName ?? "";
+    if (!confirm(`${shortDate(selected)} ~ ${shortDate(endDate)} ${where} 휴무를 모두 해제할까요?`)) return;
+    run(() => adminApi.deleteClosedDateRange({ startDate: selected, endDate, roomId }));
+  }
 
   function open(row: ClosedDate) {
     const where = row.roomName ?? "호텔 전체";
@@ -211,18 +219,17 @@ export default function ClosedDateManager() {
               const isClosed = !!hotelClosed(date) || !!ownClosed(date);
               const n = counts[date] ?? 0;
               const roomsOff = roomId === null ? roomClosedCount(date) : 0;
-              const left = roomId === null && rooms.length > 0 && !past ? remaining(date) : null;
+              const roomsLeft = roomId === null && !past ? left[date] ?? null : null;
               return (
                 <button
                   key={date}
                   type="button"
-                  disabled={past}
-                  onClick={() => pick(date)}
+                  onClick={(e) => clickDay(date, e.shiftKey)}
                   className={[
                     "flex h-16 flex-col justify-between rounded-md border p-1.5 text-left text-xs sm:h-20",
                     isClosed ? "border-red-200 bg-red-50" : inRange(date) ? "border-slate-300 bg-slate-100" : "border-slate-200 bg-white",
                     selected === date || inRange(date) ? "ring-2 ring-slate-800" : "",
-                    past ? "cursor-not-allowed opacity-40" : "hover:border-slate-400",
+                    past ? "opacity-60 hover:border-slate-400" : "hover:border-slate-400",
                   ].join(" ")}
                 >
                   <span className="text-sm">{Number(date.slice(8))}</span>
@@ -230,8 +237,8 @@ export default function ClosedDateManager() {
                     {isClosed && <span className="block font-medium text-red-600">휴무</span>}
                     {roomsOff > 0 && <span className="block text-red-500">객실 휴무 {roomsOff}</span>}
                     {n > 0 && <span className="block text-slate-500">예약 {n}</span>}
-                    {left !== null && !isClosed && (
-                      <span className={`block ${left === 0 ? "text-red-500" : "text-emerald-700"}`}>남은 {left}실</span>
+                    {roomsLeft !== null && !isClosed && (
+                      <span className={`block ${roomsLeft === 0 ? "text-red-500" : "text-emerald-700"}`}>남은 {roomsLeft}실</span>
                     )}
                   </span>
                 </button>
@@ -242,7 +249,8 @@ export default function ClosedDateManager() {
             <span><span className="mr-1 inline-block size-3 rounded-sm border border-red-200 bg-red-50 align-middle" />휴무일</span>
             <span><span className="mr-1 inline-block size-3 rounded-sm ring-2 ring-slate-800 align-middle" />선택한 날짜</span>
             <span>&quot;예약 N&quot; = 그날 잡힌 예약 수(대기 + 승인)</span>
-            <span>&quot;남은 N실&quot; = 사용 중 객실 − 휴무 객실 − 예약 (전체 객실 화면)</span>
+            <span>&quot;남은 N실&quot; = 사용 중 객실 − 휴무 객실 − 숙박 중 객실 (전체 객실 화면)</span>
+            <span>Shift+클릭 = 끝 날짜 선택</span>
           </p>
         </div>
 
@@ -250,7 +258,7 @@ export default function ClosedDateManager() {
           {/* ③ 휴무 지정 / 해제 */}
           <div className="card space-y-3 text-sm">
             {!selected || !sel ? (
-              <p className="text-slate-500">달력에서 날짜를 고르세요. 지난 날짜는 고를 수 없어요.</p>
+              <p className="text-slate-500">달력에서 날짜를 고르세요. Shift+클릭으로 끝 날짜까지 고르면 기간으로 지정 · 해제할 수 있어요.</p>
             ) : (
               <>
                 <div>
@@ -262,9 +270,25 @@ export default function ClosedDateManager() {
                 {sel.own ? (
                   <>
                     <p className="rounded-md bg-red-50 px-3 py-2 text-red-700">휴무 · {sel.own.reason ?? "사유 없음"}</p>
-                    <button type="button" className="btn-outline w-full" disabled={busy} onClick={() => open(sel.own!)}>
-                      휴무 해제
-                    </button>
+                    <label className="block text-xs text-slate-500">
+                      끝 날짜 (기간으로 해제할 때만)
+                      <input className="input mt-1" type="date" value={endDate} min={selected}
+                        onChange={(e) => setEndDate(e.target.value)} />
+                    </label>
+                    {isRange ? (
+                      <button type="button" className="btn-outline w-full" disabled={busy} onClick={openRange}>
+                        {shortDate(selected)} ~ {shortDate(endDate)} 휴무 모두 해제
+                      </button>
+                    ) : (
+                      <button type="button" className="btn-outline w-full" disabled={busy} onClick={() => open(sel.own!)}>
+                        휴무 해제
+                      </button>
+                    )}
+                    {isRange && (
+                      <p className="text-xs text-slate-500">
+                        {roomId === null ? "호텔 전체 휴무만" : "이 객실 휴무만"} 해제돼요. 다른 범위의 휴무는 그대로예요.
+                      </p>
+                    )}
                   </>
                 ) : blockedByHotel ? (
                   <p className="rounded-md bg-red-50 px-3 py-2 text-red-700">

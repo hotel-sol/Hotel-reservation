@@ -85,7 +85,8 @@ async def upload_file(
         fail(409, "TOO_MANY_FILES", f"객실 사진은 최대 {MAX_FILES_PER_ROOM}장까지 올릴 수 있습니다.")
 
     name = f"{uuid.uuid4().hex}{'.jpg' if ext == '.jpeg' else ext}"
-    (room_dir() / name).write_bytes(data)
+    saved = room_dir() / name
+    saved.write_bytes(data)
 
     row = AttachFile(
         target_type=target_type,
@@ -94,8 +95,14 @@ async def upload_file(
         saved_path=f"uploads/rooms/{name}",
         file_size=len(data),
     )
-    db.add(row)
-    db.commit()
+    try:
+        db.add(row)
+        db.commit()
+    except Exception:
+        # DB 기록이 실패하면 방금 저장한 파일도 지운다 (화면에 안 보이는 파일이 디스크에 남지 않게)
+        db.rollback()
+        saved.unlink(missing_ok=True)
+        raise
     db.refresh(row)
     return row
 

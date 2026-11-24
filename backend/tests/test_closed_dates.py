@@ -73,8 +73,7 @@ def test_already_closed_rules(client):
 
 
 def test_input_and_permission_errors(client):
-    assert post(client, TODAY - timedelta(days=1)).json()["detail"]["code"] == "PAST_DATE"
-    assert post(client, TODAY).status_code == 201  # 오늘은 가능
+    assert post(client, TODAY).status_code == 201
     assert post(client, D1, reason="   ").status_code == 400
     assert post(client, D1, room_id=999).status_code == 404
     assert post(client, D1, headers=GUEST).status_code == 403
@@ -110,7 +109,6 @@ def test_range_input_errors(client):
     assert post_range(client, D1, D1 + timedelta(days=30)).status_code == 201  # 31일은 가능
     assert post_range(client, D1 + timedelta(days=40), D1 + timedelta(days=71)).json()["detail"]["code"] == "RANGE_TOO_LONG"
     assert post_range(client, D1 + timedelta(days=5), D1).status_code == 400  # 끝 < 시작
-    assert post_range(client, TODAY - timedelta(days=1), TODAY).json()["detail"]["code"] == "PAST_DATE"
     assert post_range(client, D1 + timedelta(days=90), D1 + timedelta(days=91), room_id=999).status_code == 404
 
 
@@ -172,3 +170,90 @@ def test_screen_scenario_close_dec_31(client):
 
     assert post(client, date(2026, 12, 15)).json()["detail"]["message"] == \
         "이 날짜에 예약 1건이 있습니다. 먼저 예약을 취소해 주세요."
+
+
+def delete_range(client, start, end, room_id=None, headers=ADMIN):
+    q = f"startDate={start}&endDate={end}" + (f"&roomId={room_id}" if room_id else "")
+    return client.delete(f"{API}/range?{q}", headers=headers)
+
+
+def test_past_dates_can_be_closed_and_released(client):
+    """#32 팀 결정: 지난 날짜도 지정 · 해제 가능."""
+    past = TODAY - timedelta(days=30)
+    r = post(client, past)
+    assert r.status_code == 201, r.text
+    assert client.delete(f"{API}/{r.json()['closedDateId']}", headers=ADMIN).status_code == 204
+    assert post_range(client, past, past + timedelta(days=2), room_id=2).status_code == 201
+    assert delete_range(client, past, past + timedelta(days=2), room_id=2).json() == {"deleted": 3}
+
+    # 그날 손님이 묵었으면(대기 · 승인) 지난 날짜라도 휴무로 지정할 수 없다. 취소된 예약은 막지 않는다
+    add_reservation(room_id=1, check_in=past, nights=2, status="APPROVED")
+    add_reservation(room_id=3, check_in=past, nights=1, status="CANCELED")
+    assert post(client, past + timedelta(days=1), room_id=1).json()["detail"]["code"] == "CLOSED_DATE_CONFLICT"
+    assert post(client, past).json()["detail"]["code"] == "CLOSED_DATE_CONFLICT"  # 호텔 전체도 불가
+    assert post_range(client, past - timedelta(days=1), past + timedelta(days=1), room_id=1).status_code == 409
+    assert post(client, past, room_id=3).status_code == 201
+    assert post(client, past + timedelta(days=2), room_id=1).status_code == 201  # 체크아웃 날
+
+
+def test_range_release_only_same_scope(client):
+    """#28: 기간 해제는 한 번에, 다른 범위(호텔 전체 ↔ 방)는 건드리지 않음."""
+    assert post_range(client, D1, D1 + timedelta(days=4)).status_code == 201  # 호텔 전체 5일
+    assert post(client, D1 + timedelta(days=6), room_id=1).status_code == 201  # 101호 하루
+
+    assert delete_range(client, D1, D1 + timedelta(days=10), room_id=2).status_code == 404  # 102호는 없음
+    assert delete_range(client, D1, D1 + timedelta(days=10)).json() == {"deleted": 5}
+    left = client.get(f"{API}?month={D1:%Y-%m}", headers=ADMIN).json()
+    left += client.get(f"{API}?month={D1 + timedelta(days=6):%Y-%m}", headers=ADMIN).json()
+    assert {(c["closedDate"], c["roomId"]) for c in left} == {((D1 + timedelta(days=6)).isoformat(), 1)}
+
+    assert delete_range(client, D1 + timedelta(days=5), D1).status_code == 400
+    assert delete_range(client, D1, D1, headers=GUEST).status_code == 403
+    assert delete_range(client, D1, D1, headers={}).status_code == 401
+
+
+def test_range_reports_all_blocked_dates(client):
+    """#29: 막힌 날짜를 한 번에 모두 알려 주고, 아무것도 넣지 않음."""
+    add_reservation(room_id=1, check_in=D1 + timedelta(days=1), nights=1)
+    add_reservation(room_id=2, check_in=D1 + timedelta(days=3), nights=1)
+    assert post(client, D1 + timedelta(days=5)).status_code == 201
+
+    r = post_range(client, D1, D1 + timedelta(days=6))
+    assert r.status_code == 409
+    detail = r.json()["detail"]
+    assert detail["code"] == "CLOSED_DATE_CONFLICT"
+    assert [b["date"] for b in detail["blockedDates"]] == [
+        (D1 + timedelta(days=i)).isoformat() for i in (1, 3, 5)]
+    assert [b["code"] for b in detail["blockedDates"]] == ["CLOSED_DATE_CONFLICT"] * 2 + ["ALREADY_CLOSED"]
+    assert "이미 휴무입니다" in detail["message"] and "예약이 있습니다" in detail["message"]
+    months = {f"{D1 + timedelta(days=i):%Y-%m}" for i in range(7)}  # 기간이 달을 넘을 수 있음
+    rows = [c for m in sorted(months) for c in client.get(f"{API}?month={m}", headers=ADMIN).json()]
+    assert [c["closedDate"] for c in rows] == [(D1 + timedelta(days=5)).isoformat()]  # 기존 1건만
+
+
+def test_day_list_format():
+    from app.api.routes.admin.closed_dates import day_list
+    assert day_list([date(2026, 12, 15), date(2026, 12, 17), date(2027, 1, 2)]) == "12월 15일 · 17일 · 1월 2일"
+
+
+def test_available_rooms_ignores_inactive_rooms(client):
+    """#30: 남은 객실 = 사용 중 객실 − 휴무 객실 − 숙박 중 객실, 비활성 객실 예약은 영향 없음."""
+    month = f"{D1:%Y-%m}"
+
+    def left(day):
+        return client.get(f"{API}/available-rooms?month={day:%Y-%m}", headers=ADMIN).json()[day.isoformat()]
+
+    total = left(D1)
+    assert total > 2
+    add_reservation(room_id=1, check_in=D1, nights=1)
+    assert left(D1) == total - 1
+    assert post(client, D1, room_id=2).status_code == 201
+    assert left(D1) == total - 2
+
+    with engine.begin() as conn:  # 101호를 비활성으로 → 그 예약은 남은 수에 영향 없음
+        conn.execute(text("UPDATE room SET is_active = 'N' WHERE room_id = 1"))
+    assert left(D1) == total - 2  # 사용 중 객실이 1 줄고, 101호 예약은 세지 않음
+
+    assert post(client, D1 + timedelta(days=1)).status_code == 201
+    assert left(D1 + timedelta(days=1)) == 0  # 호텔 전체 휴무
+    assert len(client.get(f"{API}/available-rooms?month={month}", headers=ADMIN).json()) >= 28
