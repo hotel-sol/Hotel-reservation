@@ -191,6 +191,6 @@ sequenceDiagram
 | 2 객실 관리 (ADM-001) | `/admin/rooms` | `GET POST admin/rooms`, `GET admin/rooms/summary`, `PUT admin/rooms/{id}`, `PATCH admin/rooms/{id}/status`, `POST GET files`, `DELETE files/{id}` | 구현 (사진 업로드 · 요약 카드 · 미래 예약 객실 수정 제한 · 시연용 40실 `demo_seed.sql`) |
 | 3 예약 일자 관리 (ADM-002) | `/admin/closed-dates` | `GET admin/closed-dates`, `GET admin/closed-dates/reservation-counts`, `GET admin/closed-dates/available-rooms`, `POST` · `POST range`, `DELETE admin/closed-dates/{id}` · `DELETE range` | 구현 (객실 선택 · 달력 · 기간 지정/해제 · Shift+클릭 · 이번 달 목록) |
 | 4 객실 예약 · 완료 (RSV-001/002) | `/reservation/new` `/reservation/{id}/complete` `/reservation/list` | `POST reservations`, `GET reservations/{id}`, `GET reservations/me`, `GET rooms/{id}` | 구현. **남음:** 지난 날짜 차단, `rooms/{id}/available-dates`(501, 이슈 #27) |
-| 5 공통 · 예약 관리 (ADM-003) | `/admin/reservations`, 상단 메뉴 | `GET admin/reservations`, `PATCH admin/reservations/{id}/approve · cancel`, `GET menus` | 구현 |
+| 5 공통 · 예약 관리 (ADM-003) | `/admin/reservations`, 상단 메뉴 | `GET admin/reservations`, `GET admin/reservations/counts`, `PATCH admin/reservations/{id}/approve · cancel`, `GET menus` | 구현 · 테스트 (탭 건수, 확인 팝업, 관리자 · 손님 메뉴 분리) |
 
 전체 API 목록과 입력 · 출력 모양은 서버를 켜고 http://localhost:8000/docs 에서 봅니다.

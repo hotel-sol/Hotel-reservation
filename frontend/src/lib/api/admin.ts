@@ -1,5 +1,13 @@
 import type {
-  AttachFile, ClosedDate, Page, Reservation, ReservationCounts, ReservationStatus, Room, RoomSummary,
+  AttachFile,
+  ClosedDate,
+  Page,
+  Reservation,
+  ReservationCounts,
+  ReservationStatus,
+  ReservationStatusCounts,
+  Room,
+  RoomSummary,
 } from "@/types/api";
 import { api } from "./client";
 
@@ -48,6 +56,9 @@ export const adminApi = {
   // ADM-003 예약 관리
   reservations: (query: { status?: ReservationStatus | ""; from?: string; to?: string; keyword?: string; page?: number }) =>
     api<Page<Reservation>>("/admin/reservations", { query }),
+  // 탭 옆 숫자. 검색 조건(기간 · 예약자명/번호)은 목록과 같다
+  reservationStatusCounts: (query: { from?: string; to?: string; keyword?: string }) =>
+    api<ReservationStatusCounts>("/admin/reservations/counts", { query }),
   approve: (id: number) => api<Reservation>(`/admin/reservations/${id}/approve`, { method: "PATCH" }),
   cancel: (id: number) => api<Reservation>(`/admin/reservations/${id}/cancel`, { method: "PATCH" }),
 };

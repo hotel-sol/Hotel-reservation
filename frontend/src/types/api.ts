@@ -88,6 +88,9 @@ export interface ClosedDate {
 /** 날짜별 예약 수(대기 + 승인). 0건인 날은 빠진다. 예: {"2026-12-15": 1} */
 export type ReservationCounts = Record<string, number>;
 
+/** 관리자 예약 관리 탭 옆 숫자: 상태별 건수 + 전체 */
+export type ReservationStatusCounts = Record<"ALL" | ReservationStatus, number>;
+
 export interface MenuItem {
   menuId: number;
   parentId: number | null;
