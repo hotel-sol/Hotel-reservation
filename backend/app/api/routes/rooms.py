@@ -5,6 +5,8 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import DB
 from app.core.dates import today_kst
+from app.schemas.room import RoomDetailOut
+from app.services.room_service import room_detail
 from app.core.exceptions import fail
 from app.models import Room
 from app.schemas.common import Page
@@ -36,12 +38,13 @@ def recommend(
     return Page(items=items, total=total, page=page, size=size)
 
 
-@router.get("/{room_id}", response_model=RoomOut)
+@router.get("/{room_id}", response_model=RoomDetailOut)
 def get_room(room_id: int, db: DB):
+    """객실 상세(1B) · 예약 화면(RSV-001) 객실 정보. RoomOut 에 사진 · 뱃지 · 예약 수를 더했다."""
     room = db.get(Room, room_id)
     if room is None or room.is_active != "Y":
         fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
-    return room
+    return room_detail(db, room)
 
 
 @router.post("/{room_id}/view", status_code=204)

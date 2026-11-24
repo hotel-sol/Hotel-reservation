@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Pagination from "@/components/Pagination";
 import RoomCard from "@/components/RoomCard";
@@ -15,7 +16,13 @@ const SORTS: { value: RoomSort; label: string }[] = [
 ];
 
 export default function RoomRecommend() {
-  const [form, setForm] = useState({ checkIn: "", checkOut: "", guests: 2 });
+  // 객실 상세에서 "객실 추천"으로 돌아오면 주소의 검색 조건을 그대로 쓴다
+  const params = useSearchParams();
+  const [form, setForm] = useState(() => ({
+    checkIn: params.get("checkIn") ?? "",
+    checkOut: params.get("checkOut") ?? "",
+    guests: Number(params.get("guests")) || 2,
+  }));
   const [search, setSearch] = useState(form);
   const [sort, setSort] = useState<RoomSort>("recommend");
   const [page, setPage] = useState(1);
@@ -94,6 +101,23 @@ export default function RoomRecommend() {
           <RoomCard key={room.roomId} room={room} query={query} onOpen={() => roomsApi.view(room.roomId).catch(() => {})} />
         ))}
       </div>
+      {data?.total === 0 && (
+        <div className="card text-center text-sm text-slate-500">
+          <p>조건에 맞는 객실이 없습니다. 날짜나 인원을 바꿔 보세요.</p>
+          <button
+            className="btn-primary mt-3"
+            onClick={() => {
+              const all = { checkIn: "", checkOut: "", guests: 1 };
+              setForm(all);
+              setSearch(all);
+              setSort("recommend");
+              setPage(1);
+            }}
+          >
+            전체 추천 보기
+          </button>
+        </div>
+      )}
       {data && <Pagination page={page} size={data.size} total={data.total} onChange={setPage} />}
     </div>
   );

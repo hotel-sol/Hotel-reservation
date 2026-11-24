@@ -178,3 +178,28 @@ def test_menus_follow_role(client, seeded_db):
     create_admin.create_admin("boss01", "관리자", "adminpass1")
     login(client, "boss01", "adminpass1")
     assert {"객실 관리", "예약 일자 관리", "예약 관리"} <= set(names())
+
+
+# ---------- 아이디 중복확인 ----------
+
+def check_id(client, login_id):
+    return client.get("/api/members/check-id", params={"loginId": login_id})
+
+
+def test_check_id_available_then_taken_ignoring_case(client):
+    r = check_id(client, "guest01")
+    assert r.status_code == 200 and r.json() == {"available": True, "message": "사용할 수 있는 아이디입니다."}
+    signup(client)
+    for login_id in ("guest01", "GUEST01", " guest01 "):
+        assert check_id(client, login_id).json()["available"] is False
+    assert check_id(client, "guest02").json()["available"] is True
+
+
+@pytest.mark.parametrize("login_id", ["abc", "한글아이디", "bad id!", "a" * 51])
+def test_check_id_rejects_bad_format(client, login_id):
+    r = check_id(client, login_id)
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "INVALID_LOGIN_ID"
+
+
+def test_check_id_needs_login_id(client):
+    assert client.get("/api/members/check-id").status_code == 422
