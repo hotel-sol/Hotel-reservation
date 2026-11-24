@@ -86,6 +86,27 @@ def test_max_five_per_room(admin):
     assert upload(admin, room_id=2).status_code == 201  # 다른 방은 따로 센다
 
 
+def test_db_failure_removes_saved_file(admin, monkeypatch):
+    """DB 기록(commit)이 실패하면 디스크에 쓴 파일도 지워서, 화면에 안 보이는 파일이 남지 않는다."""
+    from pathlib import Path
+
+    from sqlalchemy.orm import Session
+
+    rooms = Path(get_settings().upload_dir) / "rooms"
+    before = set(rooms.glob("*")) if rooms.exists() else set()
+
+    def broken_commit(self):
+        raise RuntimeError("DB 저장 실패 흉내")
+
+    monkeypatch.setattr(Session, "commit", broken_commit)
+    with pytest.raises(RuntimeError):
+        upload(admin)
+    monkeypatch.undo()
+
+    assert set(rooms.glob("*")) - before == set()
+    assert admin.get("/api/files", params={"targetType": "ROOM", "targetId": 1}).json() == []
+
+
 def test_unknown_room_and_target(admin):
     assert upload(admin, room_id=9999).status_code == 404
     assert upload(admin, target="MEMBER").status_code == 400
