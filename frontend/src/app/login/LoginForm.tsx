@@ -6,6 +6,18 @@ import { useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { membersApi } from "@/lib/api/members";
 
+/** next 가 우리 사이트 안의 주소면 검사한 전체 주소(href)를, 아니면 null.
+ *  경로만 꺼내면 "/.//evil.com" → "//evil.com" 처럼 다시 외부 주소가 되므로 href 를 그대로 쓴다 */
+function internalUrl(next: string | null): string | null {
+  if (!next) return null;
+  try {
+    const url = new URL(next, window.location.origin);
+    return url.origin === window.location.origin ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function LoginForm() {
   const next = useSearchParams().get("next");
   const [loginId, setLoginId] = useState("");
@@ -17,8 +29,9 @@ export default function LoginForm() {
     try {
       const me = await membersApi.login(loginId, password);
       setPassword(""); // 이전 화면 상태 유지(Activity) 대비
-      // 오픈 리다이렉트 방지: 내부 경로만 허용
-      const safeNext = next?.startsWith("/") && !next.startsWith("//") ? next : null;
+      // 오픈 리다이렉트 방지: 브라우저와 같은 방식으로 주소를 풀어서 우리 사이트일 때만 허용.
+      // 글자 검사(startsWith("/"))는 "/\evil.com" · "/<탭>/evil.com" 같은 외부 주소를 통과시킨다
+      const safeNext = internalUrl(next);
       // 페이지 전체를 새로 읽는다(router.push 아님): 숨겨 둔 화면(Activity)에 로그인 전 상태가 남지 않게
       window.location.assign(safeNext ?? (me.role === "ADMIN" ? "/admin/reservations" : "/rooms"));
     } catch (err) {
