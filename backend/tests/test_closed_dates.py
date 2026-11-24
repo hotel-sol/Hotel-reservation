@@ -186,6 +186,15 @@ def test_past_dates_can_be_closed_and_released(client):
     assert post_range(client, past, past + timedelta(days=2), room_id=2).status_code == 201
     assert delete_range(client, past, past + timedelta(days=2), room_id=2).json() == {"deleted": 3}
 
+    # 그날 손님이 묵었으면(대기 · 승인) 지난 날짜라도 휴무로 지정할 수 없다. 취소된 예약은 막지 않는다
+    add_reservation(room_id=1, check_in=past, nights=2, status="APPROVED")
+    add_reservation(room_id=3, check_in=past, nights=1, status="CANCELED")
+    assert post(client, past + timedelta(days=1), room_id=1).json()["detail"]["code"] == "CLOSED_DATE_CONFLICT"
+    assert post(client, past).json()["detail"]["code"] == "CLOSED_DATE_CONFLICT"  # 호텔 전체도 불가
+    assert post_range(client, past - timedelta(days=1), past + timedelta(days=1), room_id=1).status_code == 409
+    assert post(client, past, room_id=3).status_code == 201
+    assert post(client, past + timedelta(days=2), room_id=1).status_code == 201  # 체크아웃 날
+
 
 def test_range_release_only_same_scope(client):
     """#28: 기간 해제는 한 번에, 다른 범위(호텔 전체 ↔ 방)는 건드리지 않음."""
