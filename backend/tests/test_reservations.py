@@ -3,7 +3,7 @@
 시드 1번 = ADMIN, 2번 = USER. 객실 1(101호, 2명, 80000원) · 2(102호) · 5(401호, 판매 안 함).
 쿠키는 로그인 대신 같은 방식으로 직접 만든다(test_closed_dates.py 와 같음).
 """
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -160,3 +160,43 @@ def test_quote_errors_same_as_reservation(client):
     assert code(quote(client, D1, room_id=5)) == "ROOM_NOT_FOUND"
     assert quote(client, D1, guests=0).status_code == 422
     assert client.get("/api/rooms/1/quote").status_code == 422  # 날짜 · 인원 빠짐
+
+
+# ---- 취소된 예약의 날짜가 달력에서 다시 열리는지 (남은 일 6) ----
+
+ADMIN = {"Cookie": f"{COOKIE}={create_session_token(1, SEED_PASSWORD)}"}
+
+
+def calendar(client, day, room_id=1):
+    """day 가 속한 달의 달력에서 {날짜: reason} 만 뽑는다."""
+    r = client.get(f"/api/rooms/{room_id}/available-dates?month={day:%Y-%m}")
+    assert r.status_code == 200, r.text
+    return {d["day"]: d["reason"] for d in r.json()["days"]}
+
+
+@pytest.mark.parametrize("approve_first", [False, True], ids=["pending", "approved"])
+def test_canceled_reservation_reopens_calendar(client, approve_first):
+    day = D1.replace(day=10)  # 같은 달 안에서 10 · 11일 숙박, 12일 체크아웃
+    r = reserve(client, day, nights=2)
+    assert r.status_code == 201, r.text
+    rid = r.json()["reservationId"]
+    if approve_first:
+        assert client.patch(f"/api/admin/reservations/{rid}/approve", headers=ADMIN).status_code == 200
+
+    cal = calendar(client, day)
+    assert [cal[(day + timedelta(days=i)).isoformat()] for i in range(3)] == ["BOOKED", "BOOKED", None]
+    assert code(reserve(client, day, nights=1)) == "ROOM_NOT_AVAILABLE"
+
+    assert client.patch(f"/api/admin/reservations/{rid}/cancel", headers=ADMIN).json()["status"] == "CANCELED"
+
+    cal = calendar(client, day)
+    assert [cal[(day + timedelta(days=i)).isoformat()] for i in range(3)] == [None, None, None]
+    assert reserve(client, day, nights=2).status_code == 201  # 같은 날짜를 다시 예약할 수 있음
+
+
+def test_seed_canceled_reservation_is_open(client):
+    """시드: 102호 2026-12-20~21 예약은 CANCELED 라서 20일이 열려 있어야 한다."""
+    if TODAY > date(2026, 12, 20):
+        pytest.skip("시드 날짜가 이미 지남")
+    cal = calendar(client, date(2026, 12, 20), room_id=2)
+    assert cal["2026-12-20"] is None
