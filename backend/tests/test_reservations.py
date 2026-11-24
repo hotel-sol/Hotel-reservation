@@ -125,3 +125,38 @@ def test_input_errors(client):
     assert code(reserve(client, D1, room_id=999)) == "ROOM_NOT_FOUND"
     assert reserve(client, D1, nights=0).status_code == 422  # 체크아웃 = 체크인
     assert reserve(client, D1, headers={}).status_code == 401  # 로그인 안 함
+
+
+# ---- 요금 견적 (Step 2 4C): GET /api/rooms/{id}/quote ----
+
+def quote(client, check_in, nights=2, room_id=1, guests=2):
+    check_out = check_in + timedelta(days=nights)
+    return client.get(f"/api/rooms/{room_id}/quote?checkIn={check_in}&checkOut={check_out}&guests={guests}")
+
+
+def test_quote_matches_saved_reservation(client):
+    r = quote(client, D1, nights=3, room_id=3)  # 201호 120000원
+    assert r.status_code == 200, r.text
+    assert r.json() == {
+        "roomId": 3, "checkIn": D1.isoformat(), "checkOut": (D1 + timedelta(days=3)).isoformat(),
+        "guests": 2, "nights": 3, "pricePerNight": 120000, "totalPrice": 360000,
+    }
+    saved = reserve(client, D1, nights=3, room_id=3)  # 같은 조건으로 저장하면 같은 금액
+    assert saved.json()["totalPrice"] == r.json()["totalPrice"]
+
+
+def test_quote_works_without_login(client):
+    assert quote(client, D1).status_code == 200  # 쿠키 없이도 금액은 볼 수 있음
+
+
+def test_quote_errors_same_as_reservation(client):
+    r = quote(client, D1, nights=0)
+    assert r.status_code == 400 and code(r) == "INVALID_DATES"
+    assert code(quote(client, D1, nights=-1)) == "INVALID_DATES"
+    assert code(quote(client, D1, guests=3)) == "TOO_MANY_GUESTS"
+    assert code(reserve(client, D1, guests=3)) == "TOO_MANY_GUESTS"
+    assert code(quote(client, TODAY - timedelta(days=1))) == "PAST_DATE"
+    assert code(reserve(client, TODAY - timedelta(days=1))) == "PAST_DATE"
+    assert code(quote(client, D1, room_id=5)) == "ROOM_NOT_FOUND"
+    assert quote(client, D1, guests=0).status_code == 422
+    assert client.get("/api/rooms/1/quote").status_code == 422  # 날짜 · 인원 빠짐

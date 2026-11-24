@@ -10,8 +10,9 @@ from app.schemas.common import Page
 from app.schemas.room import RecommendRoomOut, RoomOut, RoomSort
 from app.services.room_service import recommend_rooms
 from app.core.dates import today_kst
-from app.schemas.reservation import AvailableDatesOut
+from app.schemas.reservation import AvailableDatesOut, QuoteOut
 from app.services.availability_service import month_range, room_calendar
+from app.services.reservation_service import check_stay, get_bookable_room, total_price
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -67,4 +68,26 @@ def available_dates(room_id: int, db: DB, month: str = Query(..., pattern=r"^\d{
         month=month,
         today=today_kst(),
         days=room_calendar(db, room_id, first, last),
+    )
+
+
+@router.get("/{room_id}/quote", response_model=QuoteOut)
+def quote(
+    room_id: int,
+    db: DB,
+    check_in: date = Query(..., alias="checkIn"),
+    check_out: date = Query(..., alias="checkOut"),
+    guests: int = Query(..., ge=1),
+):
+    """Step 2 4C 요금 견적: 예약 저장과 같은 확인 · 계산으로 박수 · 1박 요금 · 총액을 미리 보여 준다."""
+    room = get_bookable_room(db, room_id)
+    nights = check_stay(room, check_in, check_out, guests)
+    return QuoteOut(
+        room_id=room.room_id,
+        check_in=check_in,
+        check_out=check_out,
+        guests=guests,
+        nights=nights,
+        price_per_night=room.price,
+        total_price=total_price(room, nights),
     )

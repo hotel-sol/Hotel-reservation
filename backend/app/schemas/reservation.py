@@ -43,6 +43,18 @@ class CalendarDay(CamelModel):
     reason: str | None = None
 
 
+class QuoteOut(CamelModel):
+    """GET /api/rooms/{id}/quote 응답 (Step 2 4C). 예약 저장 때와 같은 계산: total_price = price_per_night * nights"""
+
+    room_id: int
+    check_in: date
+    check_out: date
+    guests: int
+    nights: int
+    price_per_night: int
+    total_price: int
+
+
 class AvailableDatesOut(CamelModel):
     """GET /api/rooms/{id}/available-dates 응답"""
 

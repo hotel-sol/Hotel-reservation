@@ -4,11 +4,11 @@ from sqlalchemy import select
 from fastapi import APIRouter
 
 from app.api.deps import DB, CurrentMember
-from app.core.dates import today_kst
 from app.core.exceptions import fail
 from app.models import Reservation, Room
 from app.schemas.reservation import ReservationCreate, ReservationOut
 from app.services.availability_service import block_reason
+from app.services.reservation_service import check_stay, get_bookable_room, total_price
 
 router = APIRouter(prefix="/reservations", tags=["reservations"])
 
@@ -29,26 +29,20 @@ def to_out(r: Reservation, room_name: str | None = None) -> ReservationOut:
 @router.post("", response_model=ReservationOut, status_code=201)
 def create_reservation(body: ReservationCreate, member: CurrentMember, db: DB):
     # 객실 행을 잠가서, 같은 방에 동시에 들어온 예약은 먼저 온 쪽이 끝날 때까지 기다리게 한다.
-    room = db.get(Room, body.room_id, with_for_update=True)
-    if room is None or room.is_active != "Y":
-        fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
-    if body.guest_count > room.max_guest:
-        fail(400, "TOO_MANY_GUESTS", f"최대 {room.max_guest}명까지 예약할 수 있습니다.")
-    if body.check_in_date < today_kst():
-        fail(400, "PAST_DATE", "지난 날짜는 예약할 수 없습니다.")
+    room = get_bookable_room(db, body.room_id, lock=True)
+    nights = check_stay(room, body.check_in_date, body.check_out_date, body.guest_count)
 
     reason = block_reason(db, room.room_id, body.check_in_date, body.check_out_date)
     if reason is not None:
         fail(*BLOCK_ERRORS[reason])
 
-    nights = (body.check_out_date - body.check_in_date).days
     reservation = Reservation(
         member_id=member.member_id,
         room_id=room.room_id,
         check_in_date=body.check_in_date,
         check_out_date=body.check_out_date,
         guest_count=body.guest_count,
-        total_price=room.price * nights,
+        total_price=total_price(room, nights),
         request_memo=body.request_memo,
     )
     db.add(reservation)
