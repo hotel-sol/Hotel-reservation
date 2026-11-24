@@ -38,6 +38,14 @@ def test_prices_follow_view_rule(demo_db):
     assert price["0501호"] == 605_000 and price["0504호"] == 550_000  # C 리버 · 마운틴
 
 
+def test_only_three_rooms_registered_within_14_days(demo_db):
+    """추천 카드 NEW(등록 14일 이내)가 시연에서 3개만 보이게: 나머지는 60일 전 등록."""
+    recent = rows("SELECT room_name FROM room WHERE created_at >= now() - interval '14 days' ORDER BY room_name")
+    assert [r.room_name for r in recent] == ["0904호", "1204호", "1302호"]
+    old = rows("SELECT count(*) AS n FROM room WHERE created_at <= now() - interval '59 days'")
+    assert old[0].n == 37
+
+
 def test_photos_one_to_five_per_room_and_files_exist(demo_db):
     files = rows("SELECT target_id, saved_path FROM attach_file WHERE target_type = 'ROOM'")
     per_room = Counter(f.target_id for f in files)
