@@ -20,13 +20,21 @@ const RIVER_VIEW_RATE = 1.1; // 리버뷰 +10%
 
 const EMPTY: RoomInput = { roomName: "", roomType: "", maxGuest: 0, price: 0, description: "" };
 
+// 객실명 = 호실 번호(층 2자리 + 위치 2자리) + "호" (객실 상품 검토안 OP-15). 칸에는 숫자 3~4자리만 적는다.
+// 703 → 0703호, 1601 → 1601호. 이미 저장된 이름(101호 · 오션뷰 등)은 칸을 건드리지 않으면 그대로 둔다.
+const ROOM_NO = /^\d{3,4}$/;
+const toRoomName = (no: string) => `${no.padStart(4, "0")}호`;
+const roomNoOf = (name: string) => name.match(/^(\d{3,4})호$/)?.[1] ?? "";
+
+type Editing = { id: number | null; form: RoomInput; roomNo: string };
+
 export default function RoomManager() {
   const [keyword, setKeyword] = useState("");
   const [isActive, setIsActive] = useState<"" | "Y" | "N">("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page<Room> | null>(null);
   const [summary, setSummary] = useState<RoomSummary | null>(null);
-  const [editing, setEditing] = useState<{ id: number | null; form: RoomInput } | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
   const [photoRoom, setPhotoRoom] = useState<Room | null>(null); // 사진 관리 중인 객실
   const [error, setError] = useState("");
 
@@ -55,9 +63,14 @@ export default function RoomManager() {
     e.preventDefault();
     if (!editing) return;
     setError("");
+    if (nameChanged && !ROOM_NO.test(editing.roomNo)) {
+      setError("객실명은 숫자 3~4자리로 적어 주세요. (예: 703 → 0703호)");
+      return;
+    }
+    const body = { ...editing.form, roomName: nameChanged ? toRoomName(editing.roomNo) : editing.form.roomName };
     try {
-      if (editing.id) await adminApi.updateRoom(editing.id, editing.form);
-      else setPhotoRoom(await adminApi.createRoom(editing.form)); // 새 객실은 바로 사진을 올릴 수 있게 사진 창을 연다
+      if (editing.id) await adminApi.updateRoom(editing.id, body);
+      else setPhotoRoom(await adminApi.createRoom(body)); // 새 객실은 바로 사진을 올릴 수 있게 사진 창을 연다
       setEditing(null);
       load();
     } catch (err) {
@@ -74,6 +87,14 @@ export default function RoomManager() {
 
   const f = editing?.form;
   const setF = (patch: Partial<RoomInput>) => editing && setEditing({ ...editing, form: { ...editing.form, ...patch } });
+  // 새 객실이거나, 수정에서 번호 칸을 원래와 다르게 바꿨을 때만 새 규칙으로 이름을 만든다
+  const nameChanged = !!editing && (editing.id === null || editing.roomNo !== roomNoOf(editing.form.roomName));
+  const startEdit = (r?: Room) => {
+    setError("");
+    setEditing(r
+      ? { id: r.roomId, roomNo: roomNoOf(r.roomName), form: { roomName: r.roomName, roomType: r.roomType, maxGuest: r.maxGuest, price: r.price, description: r.description } }
+      : { id: null, roomNo: "", form: EMPTY });
+  };
   const grade = GRADES.find((g) => g.name === f?.roomType);
   const riverPrice = grade && Math.round(grade.price * RIVER_VIEW_RATE);
   // 등급을 고르면 기준 요금 · 최대 인원을 채운다 (그 뒤에 직접 고칠 수 있음)
@@ -104,14 +125,28 @@ export default function RoomManager() {
           <option value="Y">사용</option>
           <option value="N">비활성</option>
         </select>
-        <button className="btn-primary ml-auto" onClick={() => setEditing({ id: null, form: EMPTY })}>+ 객실 추가</button>
+        <button className="btn-primary ml-auto" onClick={() => startEdit()}>+ 객실 추가</button>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {editing && f && (
         <form onSubmit={save} className="card grid gap-3 sm:grid-cols-2">
-          <Field label="객실명" required>
-            <input className="input" placeholder="예: 1601호" required maxLength={100} value={f.roomName} onChange={(e) => setF({ roomName: e.target.value })} />
+          <Field
+            label="객실명 (호실 번호)"
+            required
+            hint={
+              nameChanged && ROOM_NO.test(editing.roomNo) ? <>저장될 이름: <b className="text-slate-700">{toRoomName(editing.roomNo)}</b></>
+              : !nameChanged ? <>현재 이름: <b className="text-slate-700">{f.roomName}</b>{!editing.roomNo && " (숫자를 넣으면 바뀌어요)"}</>
+              : "숫자 3~4자리 · 층 2자리 + 위치 2자리 (703 → 0703호)"
+            }
+          >
+            <Unit unit="호">
+              <input
+                className="input min-w-0 flex-1" inputMode="numeric" placeholder="예: 703 또는 1601" maxLength={4}
+                required={nameChanged} value={editing.roomNo}
+                onChange={(e) => setEditing({ ...editing, roomNo: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+              />
+            </Unit>
           </Field>
           <Field label="객실 종류" required hint={grade ? undefined : "등급을 고르면 기준 요금과 최대 인원이 채워져요"}>
             <select className="input" required value={f.roomType} onChange={(e) => pickGrade(e.target.value)}>
@@ -171,7 +206,7 @@ export default function RoomManager() {
                 {r.isActive === "Y" && closedSoon.has(r.roomId) && <Badge className="bg-amber-100 text-amber-800">휴무 예정</Badge>}
               </td>
               <td className="space-x-1 pr-3 text-right">
-                <button className="btn-outline px-2 py-1" onClick={() => setEditing({ id: r.roomId, form: { roomName: r.roomName, roomType: r.roomType, maxGuest: r.maxGuest, price: r.price, description: r.description } })}>수정</button>
+                <button className="btn-outline px-2 py-1" onClick={() => startEdit(r)}>수정</button>
                 <button className="btn-outline px-2 py-1" onClick={() => setPhotoRoom(r)}>사진</button>
                 <button className="btn-outline px-2 py-1" onClick={() => toggle(r)}>{r.isActive === "Y" ? "비활성화" : "활성화"}</button>
               </td>
