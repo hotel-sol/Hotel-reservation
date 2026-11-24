@@ -12,6 +12,9 @@ from app.models import Room
 from app.schemas.common import Page
 from app.schemas.room import RecommendRoomOut, RoomOut, RoomSort
 from app.services.room_service import recommend_rooms
+from app.schemas.reservation import AvailableDatesOut, QuoteOut
+from app.services.availability_service import month_range, room_calendar
+from app.services.reservation_service import check_stay, get_bookable_room, total_price
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -56,7 +59,40 @@ def increase_view(room_id: int, db: DB):
     db.commit()
 
 
-@router.get("/{room_id}/available-dates")
+@router.get("/{room_id}/available-dates", response_model=AvailableDatesOut)
 def available_dates(room_id: int, db: DB, month: str = Query(..., pattern=r"^\d{4}-\d{2}$")):
-    # TODO(RSV-001): month 의 날짜별 선택 가능 여부 (지난 날짜 · 휴무일 · 예약된 날짜 제외)
-    fail(501, "NOT_IMPLEMENTED", "준비 중입니다.")
+    """RSV-001 예약 달력: month(예: 2026-12)의 날짜별 예약 가능 여부"""
+    room = db.get(Room, room_id)
+    if room is None or room.is_active != "Y":
+        fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
+    year, mon = (int(x) for x in month.split("-"))
+    if not 1 <= mon <= 12:
+        fail(400, "INVALID_MONTH", "월은 01~12 사이로 입력하세요.")
+    first, last = month_range(year, mon)
+    return AvailableDatesOut(
+        month=month,
+        today=today_kst(),
+        days=room_calendar(db, room_id, first, last),
+    )
+
+
+@router.get("/{room_id}/quote", response_model=QuoteOut)
+def quote(
+    room_id: int,
+    db: DB,
+    check_in: date = Query(..., alias="checkIn"),
+    check_out: date = Query(..., alias="checkOut"),
+    guests: int = Query(..., ge=1),
+):
+    """Step 2 4C 요금 견적: 예약 저장과 같은 확인 · 계산으로 박수 · 1박 요금 · 총액을 미리 보여 준다."""
+    room = get_bookable_room(db, room_id)
+    nights = check_stay(room, check_in, check_out, guests)
+    return QuoteOut(
+        room_id=room.room_id,
+        check_in=check_in,
+        check_out=check_out,
+        guests=guests,
+        nights=nights,
+        price_per_night=room.price,
+        total_price=total_price(room, nights),
+    )

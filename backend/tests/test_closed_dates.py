@@ -131,13 +131,14 @@ def test_closed_dates_block_recommend_and_reservation(client):
     # 객실 판매 중지: 그 방만 빠지고 예약도 거부
     assert post_range(client, D1, D1 + timedelta(days=1), room_id=1).status_code == 201
     assert recommended_ids(client, D1) == all_rooms - {1}
-    assert reserve(client, 1, D1).json()["detail"]["code"] == "ROOM_NOT_AVAILABLE"
+    assert reserve(client, 1, D1).json()["detail"]["code"] == "ROOM_CLOSED"  # 설계서 4-13: 판매 중지
     assert reserve(client, 2, D1).status_code == 201
 
     # 호텔 전체 휴무: 기간에 하루라도 걸리면 모든 방이 빠진다
     assert post(client, D1 + timedelta(days=5)).status_code == 201
     assert recommended_ids(client, D1 + timedelta(days=4), nights=2) == set()
-    assert reserve(client, 3, D1 + timedelta(days=4), nights=2).status_code == 409
+    r = reserve(client, 3, D1 + timedelta(days=4), nights=2)
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "DATE_CLOSED"  # 설계서 4-13: 호텔 전체 휴무
 
     # 휴무일이 체크아웃 날이면 묵지 않으므로 예약 가능
     assert 3 in recommended_ids(client, D1 + timedelta(days=4))
