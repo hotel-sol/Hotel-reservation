@@ -72,22 +72,26 @@ Hotel-reservation/
 |---|---|---|
 | 공통 | `GET health`, `GET health/db` | 서버 · DB 연결 확인 |
 | 1 | `POST members/signup · login · logout`, `GET PUT members/me`, `PUT members/me/password`, `POST members/me/withdraw`, `POST members/password-reset` | 회원 |
-| 1 | `GET rooms/recommend?checkIn&checkOut&guests&sort&page&size` | 추천. `sort` = `recommend` · `popular` · `price` |
+| 1 | `GET rooms/recommend?checkIn&checkOut&guests&sort&page&size` | 추천. `sort` = `recommend` · `popular` · `price`, 뱃지 `BEST` · `HOT` · `NEW` |
+| 1 | `GET members/check-id?loginId=` | 아이디 중복 확인 |
 | 1 · 4 | `GET rooms/{id}`, `POST rooms/{id}/view` | 객실 상세, 조회수 +1 |
-| 4 | `GET rooms/{id}/available-dates?month=` | 예약 달력의 막힌 날짜 — **아직 501(이슈 #27)** |
+| 4 | `GET rooms/{id}/available-dates?month=`, `GET rooms/{id}/quote?checkIn&checkOut&guests` | 예약 달력의 막힌 날짜(지난 날 · 휴무 · 예약), 요금 견적(박수 · 총액, 로그인 불필요) |
 | 4 | `POST reservations`, `GET reservations/me`, `GET reservations/{id}` | 예약 신청(로그인), 내 예약, 예약 상세(본인 · 관리자) |
 | 2 | `GET POST admin/rooms`, `GET admin/rooms/summary`, `PUT admin/rooms/{id}`, `PATCH admin/rooms/{id}/status` | 객실 관리, 요약 카드 |
 | 2 · 5 | `POST GET files`, `DELETE files/{id}` | 객실 사진 (관리자) |
 | 3 | `GET admin/closed-dates?month&roomId`, `GET .../reservation-counts`, `GET .../available-rooms` | 그달 휴무, 날짜별 예약 수, 날짜별 남은 객실 수 |
 | 3 | `POST admin/closed-dates`, `POST .../range`, `DELETE .../{id}`, `DELETE .../range?startDate&endDate&roomId` | 휴무 지정 · 기간 지정(최대 31일) · 해제 · 기간 해제 |
-| 5 | `GET admin/reservations`, `PATCH admin/reservations/{id}/approve · cancel` | 예약 관리 |
+| 5 | `GET admin/reservations`, `GET admin/reservations/counts`, `PATCH admin/reservations/{id}/approve · cancel` | 예약 관리, 상태별 건수 |
 | 5 | `GET menus` | 역할별 메뉴 |
 
 ## 6. 주요 오류 코드
 
 | 코드 | 상태 | 언제 |
 |---|---|---|
-| `ROOM_NOT_AVAILABLE` | 409 | 예약 기간에 다른 예약(대기 · 승인)이나 휴무가 있음 |
+| `DATE_CLOSED` | 409 | 예약 기간에 호텔 전체 휴무일이 있음 (여러 이유가 겹치면 이 코드가 먼저) |
+| `ROOM_CLOSED` | 409 | 예약 기간에 그 객실만 판매 중지된 날이 있음 |
+| `ROOM_NOT_AVAILABLE` | 409 | 예약 기간에 다른 예약(대기 · 승인)이 있음 |
+| `PAST_DATE` · `INVALID_DATES` | 400 | 지난 체크인 날짜 · 체크아웃이 체크인보다 빠르거나 같음 |
 | `TOO_MANY_GUESTS` | 400 | 인원이 객실 최대 인원보다 많음 |
 | `ALREADY_CLOSED` | 409 | 이미 휴무(호텔 전체 휴무일에 객실 휴무를 넣는 경우 포함) |
 | `CLOSED_DATE_CONFLICT` | 409 | 휴무로 지정하려는 날에 묵는 예약이 있음. 기간 지정이면 `detail.blockedDates`에 막힌 날짜 전부 |

@@ -1,6 +1,6 @@
 # 태양의 호텔 — 시스템 구조 한눈에 보기
 
-GitHub에서 그림(Mermaid)으로 보입니다. 기준: **dev 브랜치, 11-24**(Step 1 + Step 2 진행분). DB는 Supabase(PostgreSQL) 팀 프로젝트 하나: 각자 개발은 스키마 hotel_<이름>, 시연은 공용 스키마 hotel. DB 시간대는 `Asia/Seoul`(11-24부터).
+GitHub에서 그림(Mermaid)으로 보입니다. 기준: **dev 브랜치, 11-24 저녁**(Step 1 + Step 2, PR #54까지). DB는 Supabase(PostgreSQL) 팀 프로젝트 하나: 각자 개발은 스키마 hotel_<이름>, 시연은 공용 스키마 hotel. DB 시간대는 `Asia/Seoul`(11-24부터).
 
 제품 요구사항 · 기술 명세 · 작업 단위는 [`../DevelopDoc/`](../DevelopDoc/)에 있습니다.
 
@@ -109,7 +109,7 @@ flowchart TD
     A["객실 추천 /rooms<br/>GET /api/rooms/recommend"] --> B{"날짜 · 인원 검색?"}
     B -- "예" --> C["빈방만: 예약 · 휴무 겹침 없음<br/>max_guest ≥ 인원, is_active=Y"]
     B -- "아니오" --> D["전체 추천 목록"]
-    C --> E["정렬: 추천순(조회수x0.3 + 최근30일 예약x0.7) · 인기순 · 낮은 가격순<br/>추천순 1등에 '추천'"]
+    C --> E["정렬: 추천순(조회수 비율x40 + 최근30일 승인 예약 비율x60) · 인기순 · 낮은 가격순<br/>1~3위 '★ 추천', HOT · NEW 뱃지"]
     D --> E
     E --> F["카드 클릭 → POST /api/rooms/{id}/view (조회수 +1)"]
     F --> G{"로그인했나?"}
@@ -187,10 +187,10 @@ sequenceDiagram
 
 | 파트 | 화면 (Next.js) | API (`/api` 생략) | 상태 |
 |---|---|---|---|
-| 1 회원 · 객실 추천 | `/login` `/signup` `/mypage` `/password-reset` `/rooms` | `members/signup · login · logout · me`, `PUT members/me`, `PUT members/me/password`, `POST members/me/withdraw`, `POST members/password-reset`, `GET rooms/recommend`, `POST rooms/{id}/view` | 구현 (마이페이지 정보 수정 · 비밀번호 변경 · 탈퇴, 비밀번호 찾기 화면 포함) |
+| 1 회원 · 객실 추천 | `/login` `/signup` `/mypage` `/password-reset` `/rooms` | `members/signup · login · logout · me`, `PUT members/me`, `PUT members/me/password`, `POST members/me/withdraw`, `POST members/password-reset`, `GET members/check-id`, `GET rooms/recommend`, `GET rooms/{id}`, `POST rooms/{id}/view` | 구현 (마이페이지 · 비밀번호 찾기 · 아이디 중복 확인 · 객실 상세 · 추천 뱃지) |
 | 2 객실 관리 (ADM-001) | `/admin/rooms` | `GET POST admin/rooms`, `GET admin/rooms/summary`, `PUT admin/rooms/{id}`, `PATCH admin/rooms/{id}/status`, `POST GET files`, `DELETE files/{id}` | 구현 (사진 업로드 · 요약 카드 · 미래 예약 객실 수정 제한 · 시연용 40실 `demo_seed.sql`) |
 | 3 예약 일자 관리 (ADM-002) | `/admin/closed-dates` | `GET admin/closed-dates`, `GET admin/closed-dates/reservation-counts`, `GET admin/closed-dates/available-rooms`, `POST` · `POST range`, `DELETE admin/closed-dates/{id}` · `DELETE range` | 구현 (객실 선택 · 달력 · 기간 지정/해제 · Shift+클릭 · 이번 달 목록) |
-| 4 객실 예약 · 완료 (RSV-001/002) | `/reservation/new` `/reservation/{id}/complete` `/reservation/list` | `POST reservations`, `GET reservations/{id}`, `GET reservations/me`, `GET rooms/{id}` | 구현. **남음:** 지난 날짜 차단, `rooms/{id}/available-dates`(501, 이슈 #27) |
-| 5 공통 · 예약 관리 (ADM-003) | `/admin/reservations`, 상단 메뉴 | `GET admin/reservations`, `GET admin/reservations/counts`, `PATCH admin/reservations/{id}/approve · cancel`, `GET menus` | 구현 · 테스트 (탭 건수, 확인 팝업, 관리자 · 손님 메뉴 분리) |
+| 4 객실 예약 · 완료 (RSV-001/002) | `/reservation/new` `/reservation/{id}/complete` `/reservation/list` | `POST reservations`, `GET reservations/{id}`, `GET reservations/me`, `GET rooms/{id}/available-dates`, `GET rooms/{id}/quote` | 구현 (예약 달력 · 요금 견적 · 단계 표시 · 막힌 이유별 오류 · 지난 날짜 차단) |
+| 5 공통 · 예약 관리 (ADM-003) | `/admin/reservations`, 상단 메뉴 | `GET admin/reservations`, `GET admin/reservations/counts`, `PATCH admin/reservations/{id}/approve · cancel`, `GET menus` | 구현 · 테스트 (탭 건수, 확인 팝업, 관리자 · 손님 메뉴 분리, 관리자 ↔ 고객 화면 전환) |
 
 전체 API 목록과 입력 · 출력 모양은 서버를 켜고 http://localhost:8000/docs 에서 봅니다.
