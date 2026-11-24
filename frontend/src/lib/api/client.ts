@@ -33,17 +33,18 @@ function parseError(status: number, body: ApiErrorBody | null): ApiError {
   return new ApiError(status, "UNKNOWN", typeof detail === "string" ? detail : "요청을 처리하지 못했습니다.");
 }
 
-/** 브라우저에서 /api/* 호출 (Next 가 FastAPI 로 프록시). 쿠키 자동 포함. */
+/** 브라우저에서 /api/* 호출 (Next 가 FastAPI 로 프록시). 쿠키 자동 포함.
+ *  json: JSON 본문 / form: 파일 업로드용 FormData (Content-Type 은 브라우저가 정함) */
 export async function api<T>(
   path: string,
-  init: Omit<RequestInit, "body"> & { query?: Query; json?: unknown } = {},
+  init: Omit<RequestInit, "body"> & { query?: Query; json?: unknown; form?: FormData } = {},
 ): Promise<T> {
-  const { query, json, headers, ...rest } = init;
+  const { query, json, form, headers, ...rest } = init;
   const res = await fetch(`/api${path}${toQueryString(query)}`, {
     ...rest,
     credentials: "same-origin",
     headers: json !== undefined ? { "Content-Type": "application/json", ...headers } : headers,
-    body: json !== undefined ? JSON.stringify(json) : undefined,
+    body: form ?? (json !== undefined ? JSON.stringify(json) : undefined),
   });
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => null);

@@ -3,10 +3,12 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 
 from app.api.deps import DB, require_admin
+from app.core.dates import today_kst
 from app.core.exceptions import fail
-from app.models import Room
+from app.models import ClosedDate, Reservation, Room
+from app.models.reservation import LIVE_STATUSES
 from app.schemas.common import Page
-from app.schemas.room import RoomCreate, RoomOut, RoomStatusUpdate, RoomUpdate
+from app.schemas.room import RoomCreate, RoomOut, RoomStatusUpdate, RoomSummary, RoomUpdate
 
 router = APIRouter(prefix="/admin/rooms", tags=["admin: rooms"], dependencies=[Depends(require_admin)])
 
@@ -37,6 +39,48 @@ def list_rooms(
     return Page(items=items, total=total, page=page, size=size)
 
 
+@router.get("/summary", response_model=RoomSummary)
+def room_summary(db: DB):
+    """목록 위 요약 카드 (2A). 오늘 = today_kst(). 휴무는 closed_date (room_id NULL = 호텔 전체 → 사용 중 객실 전부)."""
+    today = today_kst()
+    rooms = db.execute(select(Room.room_id, Room.is_active)).all()
+    active = {r.room_id for r in rooms if r.is_active == "Y"}
+
+    closures = db.execute(
+        select(ClosedDate.room_id, ClosedDate.closed_date).where(ClosedDate.closed_date >= today)
+    ).all()
+
+    def closed_ids(match) -> set[int]:
+        ids: set[int] = set()
+        for c in closures:
+            if match(c.closed_date):
+                ids |= active if c.room_id is None else ({c.room_id} & active)
+        return ids
+
+    closed_today = closed_ids(lambda d: d == today)
+    closed_soon = closed_ids(lambda d: d > today) - closed_today
+    return RoomSummary(
+        total=len(rooms),
+        on_sale=len(active - closed_today),
+        closed_today=len(closed_today),
+        closed_soon=len(closed_soon),
+        inactive=len(rooms) - len(active),
+        closed_today_room_ids=sorted(closed_today),
+        closed_soon_room_ids=sorted(closed_soon),
+    )
+
+
+def future_reservation_count(db, room_id: int) -> int:
+    """취소되지 않은 예약 중 체크아웃이 오늘 이후인 예약 수 (API 명세서 v1.3 FUTURE_RESERVATION_EXISTS 규칙)."""
+    return db.scalar(
+        select(func.count()).select_from(Reservation).where(
+            Reservation.room_id == room_id,
+            Reservation.status.in_(LIVE_STATUSES),
+            Reservation.check_out_date > today_kst(),
+        )
+    ) or 0
+
+
 @router.post("", response_model=RoomOut, status_code=201)
 def create_room(body: RoomCreate, db: DB):
     ensure_unique_name(db, body.room_name)
@@ -51,6 +95,14 @@ def create_room(body: RoomCreate, db: DB):
 def update_room(room_id: int, body: RoomUpdate, db: DB):
     room = db.get(Room, room_id) or fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
     ensure_unique_name(db, body.room_name, exclude_id=room_id)
+    # 2A: 앞으로 묵을 예약이 있으면 종류(등급) · 인원 · 요금은 못 바꾼다 (이미 받은 예약과 어긋나지 않게). 이름 · 설명은 가능
+    changed = body.room_type != room.room_type or body.max_guest != room.max_guest or body.price != room.price
+    if changed and (n := future_reservation_count(db, room_id)):
+        fail(
+            409,
+            "FUTURE_RESERVATION_EXISTS",
+            f"앞으로 묵을 예약이 {n}건 있어 객실 종류 · 인원 · 요금을 바꿀 수 없습니다. (이름 · 설명은 바꿀 수 있습니다)",
+        )
     for k, v in body.model_dump().items():
         setattr(room, k, v)
     db.commit()
