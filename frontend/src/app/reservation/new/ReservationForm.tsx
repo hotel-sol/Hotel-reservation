@@ -6,8 +6,9 @@ import { useEffect, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { reservationsApi } from "@/lib/api/reservations";
 import { roomsApi } from "@/lib/api/rooms";
-import { nightsBetween, today, won } from "@/lib/format";
+import { nightsBetween, won } from "@/lib/format";
 import type { Room } from "@/types/api";
+import StayCalendar, { addDays, dayLabel, lastCheckout, useRoomCalendar } from "./StayCalendar";
 
 export default function ReservationForm() {
   const router = useRouter();
@@ -24,9 +25,29 @@ export default function ReservationForm() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const cal = useRoomCalendar(roomId);
+
   useEffect(() => {
     if (roomId) roomsApi.get(roomId).then(setRoom).catch((e: ApiError) => setError(e.message));
   }, [roomId]);
+
+  // 주소로 받은 날짜(객실 추천에서 넘어옴)가 여러 달에 걸치면 그 달들도 불러와서 확인한다.
+  const { load } = cal;
+  useEffect(() => {
+    if (!form.checkInDate || !form.checkOutDate || form.checkOutDate <= form.checkInDate) return;
+    for (let m = form.checkInDate.slice(0, 7); m <= form.checkOutDate.slice(0, 7); m = addDays(`${m}-28`, 7).slice(0, 7)) {
+      load(m);
+    }
+  }, [load, form.checkInDate, form.checkOutDate]);
+
+  // 고른 기간에 막힌 날이 끼어 있는지 (달력 데이터를 받은 뒤에만 판단)
+  let rangeError = "";
+  if (form.checkInDate && form.checkOutDate) {
+    const { last, unknown } = lastCheckout(cal.byDay, form.checkInDate);
+    if (form.checkOutDate <= form.checkInDate) rangeError = "체크아웃은 체크인 다음 날부터 선택할 수 있습니다.";
+    else if (!(last && form.checkOutDate <= last) && !unknown)
+      rangeError = "선택한 기간에 예약할 수 없는 날이 있습니다. 달력에서 날짜를 다시 골라 주세요.";
+  }
 
   if (!roomId) {
     return (
@@ -50,6 +71,7 @@ export default function ReservationForm() {
       const e = err as ApiError;
       if (e.status === 401) router.push(`/login?next=${encodeURIComponent(location.pathname + location.search)}`);
       else setError(e.message);
+      if (e.status === 409) cal.reload(); // 그사이 다른 예약 · 휴무가 생겼으면 달력을 새로 받아 보여 준다
     } finally {
       setSubmitting(false);
     }
@@ -58,19 +80,19 @@ export default function ReservationForm() {
   return (
     <div className="grid gap-6 md:grid-cols-[1fr_360px]">
       <form onSubmit={submit} className="card space-y-4">
-        {/* TODO(RSV-001): /rooms/{id}/available-dates 로 휴무일·예약된 날짜 비활성화 달력 */}
-        <div className="grid grid-cols-2 gap-3">
-          <label className="text-sm">
-            체크인
-            <input type="date" required className="input mt-1" min={today()} value={form.checkInDate}
-              onChange={(e) => setForm({ ...form, checkInDate: e.target.value })} />
-          </label>
-          <label className="text-sm">
-            체크아웃
-            <input type="date" required className="input mt-1" min={form.checkInDate || today()} value={form.checkOutDate}
-              onChange={(e) => setForm({ ...form, checkOutDate: e.target.value })} />
-          </label>
+        <StayCalendar cal={cal} checkIn={form.checkInDate} checkOut={form.checkOutDate}
+          onChange={(checkInDate, checkOutDate) => { setForm({ ...form, checkInDate, checkOutDate }); setError(""); }} />
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <p className="rounded-md border border-slate-200 px-3 py-2">
+            <span className="block text-xs text-slate-500">체크인</span>
+            {form.checkInDate ? dayLabel(form.checkInDate) : "-"}
+          </p>
+          <p className="rounded-md border border-slate-200 px-3 py-2">
+            <span className="block text-xs text-slate-500">체크아웃</span>
+            {form.checkOutDate ? dayLabel(form.checkOutDate) : "-"}
+          </p>
         </div>
+        {rangeError && <p className="text-sm text-red-600">{rangeError}</p>}
         <label className="block text-sm">
           인원
           <input type="number" required min={1} max={room?.maxGuest} className="input mt-1" value={form.guestCount}
@@ -82,7 +104,7 @@ export default function ReservationForm() {
             onChange={(e) => setForm({ ...form, requestMemo: e.target.value })} />
         </label>
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <button className="btn-primary w-full" disabled={submitting || nights < 1}>
+        <button className="btn-primary w-full" disabled={submitting || nights < 1 || !!rangeError}>
           예약하기
         </button>
       </form>
