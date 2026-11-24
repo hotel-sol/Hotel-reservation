@@ -105,10 +105,24 @@ export default function RoomManager() {
   };
   const grade = GRADES.find((g) => g.name === f?.roomType);
   const riverPrice = grade && Math.round(grade.price * RIVER_VIEW_RATE);
-  // 등급을 고르면 기준 요금 · 최대 인원을 채운다 (그 뒤에 직접 고칠 수 있음)
+  // 설명이 아직 자동으로 채운 예시 그대로인지 (직접 고쳤으면 false → 덮어쓰지 않는다)
+  const isAutoDesc = (roomNo: string) => !!grade && f?.description === descTemplate(grade, roomNo);
+
+  // 등급을 고르면 기준 요금 · 최대 인원, 그리고 설명이 비었거나 자동 예시 그대로면 설명까지 채운다
   function pickGrade(name: string) {
+    if (!editing) return;
     const g = GRADES.find((x) => x.name === name);
-    setF(g ? { roomType: g.name, price: g.price, maxGuest: g.maxGuest } : { roomType: name });
+    if (!g) return setF({ roomType: name });
+    const fillDesc = !editing.form.description?.trim() || isAutoDesc(editing.roomNo);
+    setF({ roomType: g.name, price: g.price, maxGuest: g.maxGuest, ...(fillDesc ? { description: descTemplate(g, editing.roomNo) } : {}) });
+  }
+
+  // 호실 번호를 바꾸면, 설명이 자동 예시 그대로일 때 층도 따라 바꾼다 (905 → 9층)
+  function changeRoomNo(value: string) {
+    if (!editing) return;
+    const roomNo = value.replace(/\D/g, "").slice(0, 4);
+    const form = grade && isAutoDesc(editing.roomNo) ? { ...editing.form, description: descTemplate(grade, roomNo) } : editing.form;
+    setEditing({ ...editing, roomNo, form });
   }
 
   // 설명 칸에 등급 예시를 진짜 글자로 채우고, "(전망)" 을 골라 둬서 바로 덮어쓸 수 있게 한다
@@ -167,7 +181,7 @@ export default function RoomManager() {
               <input
                 className="input min-w-0 flex-1" inputMode="numeric" placeholder="예: 703 또는 1601" maxLength={4}
                 required={nameChanged} value={editing.roomNo}
-                onChange={(e) => setEditing({ ...editing, roomNo: e.target.value.replace(/\D/g, "").slice(0, 4) })}
+                onChange={(e) => changeRoomNo(e.target.value)}
               />
             </Unit>
           </Field>
@@ -191,8 +205,10 @@ export default function RoomManager() {
                 {f.price > 0 && <b className="text-slate-700">{won(f.price)}</b>}
                 {grade && riverPrice && (
                   <>
-                    {" "}· 기준 {won(grade.price)}, 리버뷰면{" "}
-                    <button type="button" className="text-blue-600 underline" onClick={() => setF({ price: riverPrice })}>{won(riverPrice)} 넣기</button>
+                    {" "}· 눌러서 넣기:{" "}
+                    <PriceButton active={f.price === grade.price} onClick={() => setF({ price: grade.price })}>기준 {won(grade.price)}</PriceButton>
+                    {" · "}
+                    <PriceButton active={f.price === riverPrice} onClick={() => setF({ price: riverPrice })}>리버뷰 {won(riverPrice)}</PriceButton>
                   </>
                 )}
               </>
@@ -207,14 +223,13 @@ export default function RoomManager() {
             className="sm:col-span-2"
             hint={
               <>
-                {grade
-                  ? <button type="button" className="btn-outline mr-2 px-2 py-0.5 text-xs" onClick={fillDescription}>{grade.name} 예시 넣기</button>
-                  : "객실 종류를 고르면 [예시 넣기]로 설명을 채울 수 있어요. "}
+                {grade && <button type="button" className="btn-outline mr-2 px-2 py-0.5 text-xs" onClick={fillDescription}>{grade.name} 예시 다시 넣기</button>}
+                {f.description?.includes(VIEW_SLOT) && <b className="text-amber-700">{VIEW_SLOT} 자리를 리버뷰 · 시티뷰 · 마운틴뷰로 고쳐 주세요. </b>}
                 손님 추천 카드에 앞 2줄이 보여요. (선택, 최대 1000자)
               </>
             }
           >
-            <textarea ref={descRef} className="input" maxLength={1000} placeholder="예: 12층 · 리버뷰 · 킹 · 55㎡. 휴식 공간을 갖춘 55㎡ 상위 객실" value={f.description ?? ""} onChange={(e) => setF({ description: e.target.value })} />
+            <textarea ref={descRef} className="input" maxLength={1000} placeholder="객실 종류를 고르면 등급 설명이 자동으로 채워져요" value={f.description ?? ""} onChange={(e) => setF({ description: e.target.value })} />
           </Field>
           {error && (
             <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p>
@@ -277,6 +292,15 @@ function Field({ label, required, hint, className = "", children }: {
       {children}
       {hint && <span className="block text-xs text-slate-500">{hint}</span>}
     </label>
+  );
+}
+
+// 요금 넣기 버튼: 지금 요금과 같으면 ✓ 표시
+function PriceButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className={active ? "font-semibold text-slate-700" : "text-blue-600 underline"}>
+      {active && "✓ "}{children}
+    </button>
   );
 }
 
