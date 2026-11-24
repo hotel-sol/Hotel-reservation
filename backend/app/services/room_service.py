@@ -1,15 +1,20 @@
 """객실 추천 (ROOM-001).
 
-추천 점수(0~100) = (조회수 / 최대 조회수) × 30 + (최근 30일 예약 수 / 최대 최근 예약 수) × 70
+추천 점수(0~100) = (조회수 / 최대 조회수) × 40 + (최근 30일 승인 예약 수 / 최대 최근 승인 예약 수) × 60
+(11-24 팀 결정: 조회 40 · 예약 60, 예약은 관리자가 승인한 것만)
 - 화면설계서의 '조회수 × 0.3 + 예약 수 × 0.7'을 그대로 곱하면 조회수(수백)가 예약 수(몇 건)를 압도해서
   조회수만으로 순위가 정해진다. 그래서 각각 최대값 대비 비율로 맞춘 뒤 가중치를 곱한다.
 - 최대값은 '판매 중인 객실 전체' 기준이라 검색 조건이 바뀌어도 같은 방의 점수는 같다.
-- 가중치는 VIEW_WEIGHT · RESERVATION_WEIGHT 두 상수만 바꾸면 된다(팀 협의 대상).
+- 가중치는 VIEW_WEIGHT · RESERVATION_WEIGHT 두 상수만 바꾸면 된다.
 
-예약 수는 살아 있는 예약(대기 + 승인)만 센다. 취소는 세지 않는다.
-- 추천순: 점수 높은 순. 1등(1페이지 첫 번째, 점수 0 초과)에만 "추천"
-- 인기순: 전체 예약 수 많은 순
-- 낮은 가격순: 1박 요금 오름차순
+예약 수는 승인(APPROVED) 예약만 센다. 대기는 취소될 수 있어서 빼고, 취소도 세지 않는다.
+(빈방 검색은 다르다: 대기 예약도 방을 잡고 있으므로 available_room_filter 는 대기 + 승인을 본다)
+- 추천순: 점수 높은 순 / 인기순: 전체 승인 예약 수 많은 순 / 낮은 가격순: 1박 요금 오름차순
+
+뱃지(하나만, 우선순위 BEST > HOT > NEW). 검색 조건 · 정렬과 상관없이 판매 중인 객실 전체에서 정한다.
+- BEST: 추천 점수 1~3위(점수 0 초과)  → 화면의 "★ 추천"
+- HOT : 최근 7일 승인 예약 수 1~3위(1건 이상)
+- NEW : 등록 14일 이내
 """
 from datetime import date, timedelta
 
@@ -18,12 +23,15 @@ from sqlalchemy.orm import Session
 
 from app.core.dates import today_kst
 from app.models import AttachFile, ClosedDate, Reservation, Room
-from app.models.reservation import LIVE_STATUSES
+from app.models.reservation import APPROVED, LIVE_STATUSES
 from app.schemas.room import RecommendRoomOut, RoomSort
 
-VIEW_WEIGHT = 0.3
-RESERVATION_WEIGHT = 0.7
+VIEW_WEIGHT = 0.4
+RESERVATION_WEIGHT = 0.6
 RECENT_DAYS = 30
+HOT_DAYS = 7
+NEW_DAYS = 14
+BADGE_TOP = 3
 
 
 def available_room_filter(check_in: date, check_out: date):
@@ -57,19 +65,23 @@ def recommend_rooms(
     page: int,
     size: int,
 ) -> tuple[list[RecommendRoomOut], int]:
-    since = today_kst() - timedelta(days=RECENT_DAYS)
+    today = today_kst()
+    since = today - timedelta(days=RECENT_DAYS)
+    hot_since = today - timedelta(days=HOT_DAYS)
     counts = (
         select(
             Reservation.room_id,
             func.count().label("total"),
             func.sum(case((Reservation.created_at >= since, 1), else_=0)).label("recent"),
+            func.sum(case((Reservation.created_at >= hot_since, 1), else_=0)).label("week"),
         )
-        .where(Reservation.status.in_(LIVE_STATUSES))
+        .where(Reservation.status == APPROVED)
         .group_by(Reservation.room_id)
         .subquery()
     )
     recent_cnt = func.coalesce(counts.c.recent, 0)
     total_cnt = func.coalesce(counts.c.total, 0)
+    week_cnt = func.coalesce(counts.c.week, 0)
     with_counts = select(Room).outerjoin(counts, counts.c.room_id == Room.room_id)
 
     # 비율의 기준: 판매 중인 객실 전체의 최대 조회수 · 최대 최근 예약 수
@@ -94,6 +106,25 @@ def recommend_rooms(
         .scalar_subquery()
     )
 
+    # 뱃지: 판매 중인 객실 전체에서 순위를 매긴다(검색 조건 · 페이지와 무관)
+    ranked = db.execute(
+        with_counts.with_only_columns(Room.room_id, score.label("score"), week_cnt.label("week"), Room.created_at)
+        .where(Room.is_active == "Y")
+        .order_by(score.desc(), recent_cnt.desc(), Room.room_id)
+    ).all()
+    best = {r.room_id for r in [r for r in ranked if r.score > 0][:BADGE_TOP]}
+    hot = {r.room_id for r in sorted((r for r in ranked if r.week > 0), key=lambda r: (-r.week, r.room_id))[:BADGE_TOP]}
+    new_since = today - timedelta(days=NEW_DAYS)
+
+    def badge(room: Room) -> str | None:
+        if room.room_id in best:
+            return "BEST"
+        if room.room_id in hot:
+            return "HOT"
+        if room.created_at and room.created_at.date() >= new_since:
+            return "NEW"
+        return None
+
     conditions = [Room.is_active == "Y"]
     if guests:
         conditions.append(Room.max_guest >= guests)
@@ -113,12 +144,13 @@ def recommend_rooms(
     rows = db.execute(base.order_by(*order).offset((page - 1) * size).limit(size)).all()
 
     items = []
-    for idx, (room, recent_value, total_value, score_value, thumbnail_value) in enumerate(rows):
+    for room, recent_value, total_value, score_value, thumbnail_value in rows:
         out = RecommendRoomOut.model_validate(room)
         out.recent_reservations = int(recent_value)
         out.total_reservations = int(total_value)
         out.score = round(float(score_value), 2)
         out.thumbnail_url = thumbnail_value
-        out.is_recommended = sort == "recommend" and page == 1 and idx == 0 and out.score > 0
+        out.badge = badge(room)
+        out.is_recommended = out.badge == "BEST"
         items.append(out)
     return items, total

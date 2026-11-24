@@ -11,6 +11,11 @@ class SignupRequest(CamelModel):
     email: str | None = Field(default=None, max_length=100)
 
 
+class IdCheckOut(CamelModel):
+    available: bool
+    message: str
+
+
 class LoginRequest(CamelModel):
     login_id: str
     password: str

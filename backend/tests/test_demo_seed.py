@@ -51,4 +51,4 @@ def test_recommend_shows_demo_rooms_with_thumbnails(client, demo_db):
     items = client.get("/api/rooms/recommend", params={"size": 50}).json()["items"]
     assert len(items) == 40
     assert all(i["thumbnailUrl"] and i["thumbnailUrl"].startswith("room-photos/") for i in items)
-    assert sum(i["isRecommended"] for i in items) == 1
+    assert sum(i["isRecommended"] for i in items) == 3  # 추천 점수 1~3위 (BEST)

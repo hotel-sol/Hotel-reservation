@@ -7,7 +7,7 @@
 import re
 import time
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Query, Response
 from sqlalchemy import func, select
 
 from app.api.deps import DB, CurrentMember
@@ -19,6 +19,7 @@ from app.models import Member, Reservation
 from app.models.reservation import LIVE_STATUSES
 from app.schemas.common import Message
 from app.schemas.member import (
+    IdCheckOut,
     LoginRequest,
     MemberOut,
     PasswordChange,
@@ -100,6 +101,21 @@ def ensure_unique(db, login_id: str | None, email: str | None, exclude_id: int |
 
 
 # ---------- 가입 · 로그인 · 로그아웃 ----------
+LOGIN_ID_RE = re.compile(r"^[A-Za-z0-9_]{4,50}$")  # SignupRequest.login_id 와 같은 규칙
+
+
+@router.get("/check-id", response_model=IdCheckOut)
+def check_id(db: DB, login_id: str = Query(alias="loginId")):
+    """가입 전 아이디 중복확인. 대소문자는 같은 것으로 본다(가입 때 ensure_unique 와 같은 기준)."""
+    login_id = login_id.strip()
+    if not LOGIN_ID_RE.match(login_id):
+        fail(400, "INVALID_LOGIN_ID", "아이디는 영문 · 숫자 · _ 4~50자입니다.")
+    taken = db.scalar(select(Member.member_id).where(func.lower(Member.login_id) == login_id.lower())) is not None
+    if taken:
+        return IdCheckOut(available=False, message="이미 사용 중인 아이디입니다.")
+    return IdCheckOut(available=True, message="사용할 수 있는 아이디입니다.")
+
+
 @router.post("/signup", response_model=MemberOut, status_code=201)
 def signup(body: SignupRequest, db: DB):
     name, phone, email = clean_profile(body.name, body.phone, body.email)

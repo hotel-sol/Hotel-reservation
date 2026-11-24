@@ -5,6 +5,7 @@ from pydantic import Field
 from app.schemas.common import CamelModel
 
 RoomSort = Literal["recommend", "popular", "price"]
+RoomBadge = Literal["BEST", "HOT", "NEW"]
 
 
 class RoomOut(CamelModel):
@@ -20,9 +21,10 @@ class RoomOut(CamelModel):
 
 class RecommendRoomOut(RoomOut):
     score: float = 0
-    recent_reservations: int = 0  # 최근 30일 예약 수 (대기 + 승인)
-    total_reservations: int = 0  # 전체 예약 수 (인기순 기준)
-    is_recommended: bool = False  # 1등에 "추천" 표시
+    recent_reservations: int = 0  # 최근 30일 승인 예약 수
+    total_reservations: int = 0  # 전체 승인 예약 수 (인기순 기준)
+    is_recommended: bool = False  # 추천 점수 1~3위 = badge "BEST" ("★ 추천" 리본)
+    badge: RoomBadge | None = None  # BEST > HOT(7일 승인 예약 1~3위) > NEW(등록 14일 이내), 하나만
     thumbnail_url: str | None = None
 
 
