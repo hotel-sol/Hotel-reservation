@@ -1,4 +1,5 @@
 import type {
+  AttachFile,
   ClosedDate,
   Page,
   Reservation,
@@ -6,6 +7,7 @@ import type {
   ReservationStatus,
   ReservationStatusCounts,
   Room,
+  RoomSummary,
 } from "@/types/api";
 import { api } from "./client";
 
@@ -19,6 +21,18 @@ export const adminApi = {
   updateRoom: (roomId: number, body: RoomInput) => api<Room>(`/admin/rooms/${roomId}`, { method: "PUT", json: body }),
   setRoomActive: (roomId: number, isActive: "Y" | "N") =>
     api<Room>(`/admin/rooms/${roomId}/status`, { method: "PATCH", json: { isActive } }),
+  // 목록 위 요약 카드 (전체 · 판매 중 · 오늘 휴무 · 휴무 예정 · 비활성)
+  roomSummary: () => api<RoomSummary>("/admin/rooms/summary"),
+  // 객실 사진 (jpg·png, 객실당 최대 5장. 첫 장이 추천 카드 대표 사진)
+  roomPhotos: (roomId: number) => api<AttachFile[]>("/files", { query: { targetType: "ROOM", targetId: roomId } }),
+  uploadRoomPhoto: (roomId: number, file: File) => {
+    const form = new FormData();
+    form.append("targetType", "ROOM");
+    form.append("targetId", String(roomId));
+    form.append("file", file);
+    return api<AttachFile>("/files", { method: "POST", form });
+  },
+  deleteFile: (fileId: number) => api<void>(`/files/${fileId}`, { method: "DELETE" }),
 
   // ADM-002 예약 일자(휴무일) 관리. roomId 없음 = 모든 휴무, 있음 = 호텔 전체 휴무 + 그 방 휴무
   closedDates: (month: string, roomId?: number) => api<ClosedDate[]>("/admin/closed-dates", { query: { month, roomId } }),

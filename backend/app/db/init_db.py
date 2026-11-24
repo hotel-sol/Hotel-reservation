@@ -1,6 +1,7 @@
-"""스키마를 지우고 다시 만든다. backend 폴더에서: uv run python -m app.db.init_db [--no-seed] [--reset-shared]
+"""스키마를 지우고 다시 만든다. backend 폴더에서: uv run python -m app.db.init_db [--no-seed] [--demo] [--reset-shared]
 
 .env의 DB_SCHEMA(각자 hotel_<이름>)를 DROP 후 다시 만들고 팀 DDL(docs/hotel_reservation_ddl.sql), dev_seed.sql 순서로 실행한다.
+--demo 를 붙이면 dev_seed.sql 대신 demo_seed.sql(시연용 40실 · 객실 사진)을 넣는다. 공용 hotel 용.
 .env에 ADMIN_PASSWORD가 있으면 팀 공용 개발용 관리자 admin01도 만든다.
 
 팀 Supabase 프로젝트 하나를 5명이 같이 쓰므로 실수 방지 장치를 둔다.
@@ -20,7 +21,13 @@ HERE = Path(__file__).parent
 TEAM_DDL = HERE.parents[2] / "docs" / "hotel_reservation_ddl.sql"
 
 
-def init_db(schema: str | None = None, seed: bool = True, reset_shared: bool = False) -> None:
+DEV_SEED = "dev_seed.sql"  # 개발 · 테스트용 (테스트가 이 내용을 기준으로 확인한다)
+DEMO_SEED = "demo_seed.sql"  # 시연용 40실 (공용 hotel)
+
+
+def init_db(
+    schema: str | None = None, seed: bool = True, reset_shared: bool = False, seed_file: str = DEV_SEED
+) -> None:
     s = get_settings()
     schema = schema or s.db_schema
     if not s.db_reset_allowed:
@@ -39,7 +46,7 @@ def init_db(schema: str | None = None, seed: bool = True, reset_shared: bool = F
             cur.execute(f'SET search_path TO "{schema}"')
             cur.execute(TEAM_DDL.read_text(encoding="utf-8"))
             if seed:
-                cur.execute((HERE / "dev_seed.sql").read_text(encoding="utf-8"))
+                cur.execute((HERE / seed_file).read_text(encoding="utf-8"))
         raw.commit()
     finally:
         raw.close()
@@ -49,9 +56,10 @@ def init_db(schema: str | None = None, seed: bool = True, reset_shared: bool = F
 if __name__ == "__main__":
     settings = get_settings()
     seed = "--no-seed" not in sys.argv
+    seed_file = DEMO_SEED if "--demo" in sys.argv else DEV_SEED
     try:
-        init_db(seed=seed, reset_shared="--reset-shared" in sys.argv)
-        print(f"스키마 '{settings.db_schema}' 생성 완료")
+        init_db(seed=seed, reset_shared="--reset-shared" in sys.argv, seed_file=seed_file)
+        print(f"스키마 '{settings.db_schema}' 생성 완료" + (f" ({seed_file})" if seed else ""))
         if seed and settings.admin_password:
             from app.db.create_admin import DEV_ADMIN_ID, DEV_ADMIN_NAME, create_admin
 
