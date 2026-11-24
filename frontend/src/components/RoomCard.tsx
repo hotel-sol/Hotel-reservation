@@ -14,6 +14,7 @@ export default function RoomCard({ room, query, onOpen }: { room: RecommendRoom;
   // 인기순 기준인 전체 예약 수. 예전 백엔드는 안 주므로 최근 30일 예약 수로 대신한다
   const reservations = room.totalReservations ?? room.recentReservations;
   // 상세 화면으로 갈 때도 검색 조건(날짜 · 인원)을 들고 간다. query 는 "&checkIn=..." 꼴
+  const best = room.badge === "BEST" || (room.badge === undefined && room.isRecommended);
   const detailHref = `/rooms/${room.roomId}${query ? `?${query.replace(/^&/, "")}` : ""}`;
 
   return (
@@ -25,7 +26,14 @@ export default function RoomCard({ room, query, onOpen }: { room: RecommendRoom;
         ) : (
           <div className="flex h-full items-center justify-center text-4xl">🛏️</div>
         )}
-        <RoomBadge room={room} className="absolute right-2 top-2" />
+        {best ? (
+          // 설계서: 종합 1~3위는 사진 아래쪽에 '★ 추천' 리본
+          <span className="absolute inset-x-0 bottom-0 bg-orange-600/90 py-1 text-center text-xs font-semibold tracking-wide text-white">
+            ★ 추천 객실
+          </span>
+        ) : (
+          <RoomBadge room={room} className="absolute right-2 top-2" />
+        )}
       </Link>
       <div>
         <h3 className="font-semibold"><Link href={detailHref} className="hover:underline">{room.roomName}</Link></h3>
@@ -40,9 +48,12 @@ export default function RoomCard({ room, query, onOpen }: { room: RecommendRoom;
           조회 {room.viewCount.toLocaleString("ko-KR")} · 예약 {reservations.toLocaleString("ko-KR")}
         </p>
       </div>
-      <Link href={`/reservation/new?roomId=${room.roomId}${query}`} onClick={onOpen} className="btn-outline mt-auto">
-        예약하기
-      </Link>
+      <div className="mt-auto grid grid-cols-2 gap-2">
+        <Link href={detailHref} className="btn-outline">자세히</Link>
+        <Link href={`/reservation/new?roomId=${room.roomId}${query}`} onClick={onOpen} className="btn-primary">
+          예약하기
+        </Link>
+      </div>
     </div>
   );
 }
