@@ -1,4 +1,4 @@
-import type { AvailableDates, MenuItem, Page, RecommendRoom, Room, RoomSort } from "@/types/api";
+import type { AvailableDates, MenuItem, Page, Quote, RecommendRoom, Room, RoomSort } from "@/types/api";
 import { api } from "./client";
 
 export interface RecommendQuery {
@@ -16,6 +16,8 @@ export const roomsApi = {
   view: (roomId: number) => api<void>(`/rooms/${roomId}/view`, { method: "POST" }),
   availableDates: (roomId: number, month: string) =>
     api<AvailableDates>(`/rooms/${roomId}/available-dates`, { query: { month } }),
+  quote: (roomId: number, checkIn: string, checkOut: string, guests: number) =>
+    api<Quote>(`/rooms/${roomId}/quote`, { query: { checkIn, checkOut, guests } }),
 };
 
 export const menusApi = {
