@@ -94,7 +94,7 @@ export default function RoomManager() {
       {editing && f && (
         <form onSubmit={save} className="card grid gap-3 sm:grid-cols-2">
           <input className="input" placeholder="객실명 *" required value={f.roomName} onChange={(e) => setF({ roomName: e.target.value })} />
-          <input className="input" placeholder="객실 종류 * (STANDARD, DELUXE…)" required value={f.roomType} onChange={(e) => setF({ roomType: e.target.value })} />
+          <input className="input" placeholder="객실 종류 * (디럭스, 프리미어, 이그제큐티브 스위트, 로얄 스위트)" required value={f.roomType} onChange={(e) => setF({ roomType: e.target.value })} />
           <input className="input" type="number" min={1} placeholder="최대 인원 *" required value={f.maxGuest} onChange={(e) => setF({ maxGuest: Number(e.target.value) })} />
           <input className="input" type="number" min={1} placeholder="1박 요금 *" required value={f.price} onChange={(e) => setF({ price: Number(e.target.value) })} />
           <textarea className="input sm:col-span-2" placeholder="설명" value={f.description ?? ""} onChange={(e) => setF({ description: e.target.value })} />
