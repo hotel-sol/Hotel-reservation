@@ -4,12 +4,14 @@ from datetime import date
 from fastapi import APIRouter, Query
 
 from app.api.deps import DB
+from app.core.dates import today_kst
+from app.schemas.room import RoomDetailOut
+from app.services.room_service import room_detail
 from app.core.exceptions import fail
 from app.models import Room
 from app.schemas.common import Page
 from app.schemas.room import RecommendRoomOut, RoomOut, RoomSort
 from app.services.room_service import recommend_rooms
-from app.core.dates import today_kst
 from app.schemas.reservation import AvailableDatesOut, QuoteOut
 from app.services.availability_service import month_range, room_calendar
 from app.services.reservation_service import check_stay, get_bookable_room, total_price
@@ -29,6 +31,8 @@ def recommend(
 ):
     if (check_in is None) != (check_out is None):
         fail(400, "INVALID_DATES", "체크인과 체크아웃을 함께 입력하세요.")
+    if check_in and check_in < today_kst():
+        fail(400, "INVALID_DATES", "지난 날짜는 선택할 수 없습니다.")
     if check_in and check_out and check_out <= check_in:
         fail(400, "INVALID_DATES", "체크아웃은 체크인 다음 날부터 선택할 수 있습니다.")
     items, total = recommend_rooms(
@@ -37,18 +41,19 @@ def recommend(
     return Page(items=items, total=total, page=page, size=size)
 
 
-@router.get("/{room_id}", response_model=RoomOut)
+@router.get("/{room_id}", response_model=RoomDetailOut)
 def get_room(room_id: int, db: DB):
+    """객실 상세(1B) · 예약 화면(RSV-001) 객실 정보. RoomOut 에 사진 · 뱃지 · 예약 수를 더했다."""
     room = db.get(Room, room_id)
     if room is None or room.is_active != "Y":
         fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
-    return room
+    return room_detail(db, room)
 
 
 @router.post("/{room_id}/view", status_code=204)
 def increase_view(room_id: int, db: DB):
     room = db.get(Room, room_id)
-    if room is None:
+    if room is None or room.is_active != "Y":
         fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
     room.view_count += 1
     db.commit()
