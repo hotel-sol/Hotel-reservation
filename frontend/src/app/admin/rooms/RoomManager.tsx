@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Pagination from "@/components/Pagination";
 import { adminApi, type RoomInput } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/client";
@@ -10,11 +10,12 @@ import RoomPhotos from "./RoomPhotos";
 
 // 객실 등급: 객실 상품 검토안 v1.9 요금표(비수기 · 시티·마운틴뷰 기준가)와 시연 데이터 40실의 값.
 // 화면에서 고르기만 하고, 백엔드는 지금처럼 자유 글자로 받는다(예전 STANDARD 등도 그대로 수정 가능).
+// bed · area · extra · intro 는 [예시 넣기] 설명용 (검토안 등급사양 · 시연 데이터 설명과 같은 문장)
 const GRADES = [
-  { name: "디럭스", price: 550_000, maxGuest: 2 },
-  { name: "프리미어", price: 700_000, maxGuest: 3 },
-  { name: "이그제큐티브 스위트", price: 1_200_000, maxGuest: 3 },
-  { name: "로얄 스위트", price: 4_000_000, maxGuest: 6 },
+  { name: "디럭스", price: 550_000, maxGuest: 2, bed: "퀸", area: 40, extra: "", intro: "리버·시티·마운틴 전망의 40㎡ 기본 객실. 퀸 또는 트윈" },
+  { name: "프리미어", price: 700_000, maxGuest: 3, bed: "킹", area: 55, extra: "", intro: "휴식 공간을 갖춘 55㎡ 상위 객실. 킹 또는 트윈" },
+  { name: "이그제큐티브 스위트", price: 1_200_000, maxGuest: 3, bed: "킹", area: 80, extra: "조식 · 라운지 포함", intro: "독립 거실이 있는 80㎡ 1베드룸 스위트. 조식·라운지 포함" },
+  { name: "로얄 스위트", price: 4_000_000, maxGuest: 6, bed: "킹1 + 퀸2", area: 200, extra: "조식 · 라운지 포함", intro: "두 개의 침실과 독립 거실을 갖춘 200㎡ 최상위 스위트. 최대 6명, 조식·라운지 포함" },
 ];
 const RIVER_VIEW_RATE = 1.1; // 리버뷰 +10%
 
@@ -25,6 +26,13 @@ const EMPTY: RoomInput = { roomName: "", roomType: "", maxGuest: 0, price: 0, de
 const ROOM_NO = /^\d{3,4}$/;
 const toRoomName = (no: string) => `${no.padStart(4, "0")}호`;
 const roomNoOf = (name: string) => name.match(/^(\d{3,4})호$/)?.[1] ?? "";
+
+// [예시 넣기]: "12층 · (전망) · 킹 · 55㎡. 등급 소개" — 층은 호실 번호 앞 두 자리, 전망은 방마다 달라 직접 고친다
+const VIEW_SLOT = "(전망)";
+function descTemplate(g: (typeof GRADES)[number], roomNo: string) {
+  const floor = ROOM_NO.test(roomNo) ? `${Number(roomNo.padStart(4, "0").slice(0, 2))}층` : "(층)";
+  return [floor, VIEW_SLOT, g.bed, `${g.area}㎡`, g.extra].filter(Boolean).join(" · ") + `. ${g.intro}`;
+}
 
 type Editing = { id: number | null; form: RoomInput; roomNo: string };
 
@@ -101,6 +109,20 @@ export default function RoomManager() {
   function pickGrade(name: string) {
     const g = GRADES.find((x) => x.name === name);
     setF(g ? { roomType: g.name, price: g.price, maxGuest: g.maxGuest } : { roomType: name });
+  }
+
+  // 설명 칸에 등급 예시를 진짜 글자로 채우고, "(전망)" 을 골라 둬서 바로 덮어쓸 수 있게 한다
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  function fillDescription() {
+    if (!editing || !grade) return;
+    if (f?.description?.trim() && !confirm("설명을 예시로 바꿀까요? 지금 적힌 내용은 지워져요.")) return;
+    const text = descTemplate(grade, editing.roomNo);
+    setF({ description: text });
+    requestAnimationFrame(() => {
+      const at = text.indexOf(VIEW_SLOT);
+      descRef.current?.focus();
+      descRef.current?.setSelectionRange(at, at + VIEW_SLOT.length);
+    });
   }
 
   const closedToday = new Set(summary?.closedTodayRoomIds);
@@ -180,8 +202,19 @@ export default function RoomManager() {
               <input className="input min-w-0 flex-1" type="number" min={1} required value={f.price || ""} onChange={(e) => setF({ price: Number(e.target.value) })} />
             </Unit>
           </Field>
-          <Field label="설명" className="sm:col-span-2" hint="손님 추천 카드에 앞 2줄이 보여요. 층 · 전망 · 침대 · 면적을 앞에 써 주세요. (선택, 최대 1000자)">
-            <textarea className="input" maxLength={1000} placeholder="예: 12층 · 리버뷰 · 킹 · 55㎡. 휴식 공간을 갖춘 55㎡ 상위 객실" value={f.description ?? ""} onChange={(e) => setF({ description: e.target.value })} />
+          <Field
+            label="설명"
+            className="sm:col-span-2"
+            hint={
+              <>
+                {grade
+                  ? <button type="button" className="btn-outline mr-2 px-2 py-0.5 text-xs" onClick={fillDescription}>{grade.name} 예시 넣기</button>
+                  : "객실 종류를 고르면 [예시 넣기]로 설명을 채울 수 있어요. "}
+                손님 추천 카드에 앞 2줄이 보여요. (선택, 최대 1000자)
+              </>
+            }
+          >
+            <textarea ref={descRef} className="input" maxLength={1000} placeholder="예: 12층 · 리버뷰 · 킹 · 55㎡. 휴식 공간을 갖춘 55㎡ 상위 객실" value={f.description ?? ""} onChange={(e) => setF({ description: e.target.value })} />
           </Field>
           {error && (
             <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p>
