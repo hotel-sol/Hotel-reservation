@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { membersApi } from "@/lib/api/members";
 import { menusApi } from "@/lib/api/rooms";
@@ -13,7 +13,6 @@ import type { Member, MenuItem } from "@/types/api";
  * - 관리자는 오른쪽 위 이름 옆 버튼으로 "관리자 페이지" ↔ "고객 화면"을 오간다(같은 자리, 글자만 바뀜)
  */
 export default function Header() {
-  const router = useRouter();
   const pathname = usePathname();
   const [member, setMember] = useState<Member | null>(null);
   const [menus, setMenus] = useState<MenuItem[]>([]);
@@ -31,8 +30,9 @@ export default function Header() {
 
   async function logout() {
     await membersApi.logout();
-    setMember(null);
-    router.push("/login");
+    // 페이지 전체를 새로 읽는다(router.push 아님): 숨겨 둔 화면(Activity)에 이전 사람의 예약 · 정보가 남지 않게
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- 의도적인 하드 이동
+    window.location.assign("/login");
   }
 
   return (

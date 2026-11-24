@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { membersApi } from "@/lib/api/members";
 
 export default function LoginForm() {
-  const router = useRouter();
   const next = useSearchParams().get("next");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +19,8 @@ export default function LoginForm() {
       setPassword(""); // 이전 화면 상태 유지(Activity) 대비
       // 오픈 리다이렉트 방지: 내부 경로만 허용
       const safeNext = next?.startsWith("/") && !next.startsWith("//") ? next : null;
-      router.push(safeNext ?? (me.role === "ADMIN" ? "/admin/reservations" : "/rooms"));
+      // 페이지 전체를 새로 읽는다(router.push 아님): 숨겨 둔 화면(Activity)에 로그인 전 상태가 남지 않게
+      window.location.assign(safeNext ?? (me.role === "ADMIN" ? "/admin/reservations" : "/rooms"));
     } catch (err) {
       setError((err as ApiError).message);
     }
