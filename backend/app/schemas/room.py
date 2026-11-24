@@ -28,6 +28,11 @@ class RecommendRoomOut(RoomOut):
     thumbnail_url: str | None = None
 
 
+class RoomDetailOut(RecommendRoomOut):
+    """객실 상세 (1B): 추천 카드 정보 + 사진 전부(올린 순서)"""
+    photos: list[str] = []
+
+
 class RoomCreate(CamelModel):
     room_name: str = Field(min_length=1, max_length=100)
     room_type: str = Field(min_length=1, max_length=50)

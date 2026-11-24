@@ -63,6 +63,11 @@ export interface RecommendRoom extends Room {
   thumbnailUrl: string | null; // 대표 사진 경로 (예: "uploads/rooms/a.jpg"), 없으면 null
 }
 
+// GET /api/rooms/{id} — 객실 상세(1B). 추천 카드 정보 + 사진 전부(올린 순서)
+export interface RoomDetail extends RecommendRoom {
+  photos: string[];
+}
+
 export interface Reservation {
   reservationId: number;
   memberId: number;

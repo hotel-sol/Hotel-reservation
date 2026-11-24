@@ -257,3 +257,30 @@ def test_view_count_without_login_and_404_for_hidden_or_missing(client):
     for room_id in (hidden, 999999):
         r = client.post(f"/api/rooms/{room_id}/view")
         assert r.status_code == 404 and r.json()["detail"]["code"] == "ROOM_NOT_FOUND"
+
+
+# ---------- 객실 상세 (1B) ----------
+
+def test_detail_has_photos_badge_and_counts(client):
+    a = room("A", views=10)
+    book(a)
+    room("B")
+    for name in ("first.jpg", "second.jpg"):
+        run("INSERT INTO attach_file (target_type, target_id, original_name, saved_path, file_size)"
+            " VALUES ('ROOM', :id, :name, :path, 1)", id=a, name=name, path=f"uploads/rooms/{name}")
+    r = client.get(f"/api/rooms/{a}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["photos"] == ["uploads/rooms/first.jpg", "uploads/rooms/second.jpg"]
+    assert body["thumbnailUrl"] == "uploads/rooms/first.jpg"
+    assert (body["badge"], body["isRecommended"], body["score"]) == ("BEST", True, 100.0)
+    assert (body["recentReservations"], body["totalReservations"]) == (1, 1)
+    # 목록과 같은 뱃지
+    assert {i["roomName"]: i["badge"] for i in get(client)["items"]}["A"] == body["badge"]
+
+
+def test_detail_404_for_hidden_or_missing(client):
+    hidden = room("숨김", active="N")
+    for room_id in (hidden, 999999):
+        r = client.get(f"/api/rooms/{room_id}")
+        assert r.status_code == 404 and r.json()["detail"]["code"] == "ROOM_NOT_FOUND"

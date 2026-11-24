@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.core.dates import today_kst
 from app.models import AttachFile, ClosedDate, Reservation, Room
 from app.models.reservation import APPROVED, LIVE_STATUSES
-from app.schemas.room import RecommendRoomOut, RoomSort
+from app.schemas.room import RecommendRoomOut, RoomDetailOut, RoomSort
 
 VIEW_WEIGHT = 0.4
 RESERVATION_WEIGHT = 0.6
@@ -55,16 +55,8 @@ def _ratio(value, max_value: int):
     return value * (1.0 / max_value) if max_value else literal(0)
 
 
-def recommend_rooms(
-    db: Session,
-    *,
-    check_in: date | None,
-    check_out: date | None,
-    guests: int | None,
-    sort: RoomSort,
-    page: int,
-    size: int,
-) -> tuple[list[RecommendRoomOut], int]:
+def _scoring(db: Session):
+    """예약 수 · 추천 점수 식. 추천 목록과 객실 상세(뱃지)가 같이 쓴다."""
     today = today_kst()
     since = today - timedelta(days=RECENT_DAYS)
     hot_since = today - timedelta(days=HOT_DAYS)
@@ -98,15 +90,11 @@ def recommend_rooms(
         ),
         2,
     )
-    thumbnail = (
-        select(AttachFile.saved_path)
-        .where(AttachFile.target_type == "ROOM", AttachFile.target_id == Room.room_id)
-        .order_by(AttachFile.file_id)
-        .limit(1)
-        .scalar_subquery()
-    )
+    return with_counts, recent_cnt, total_cnt, week_cnt, score
 
-    # 뱃지: 판매 중인 객실 전체에서 순위를 매긴다(검색 조건 · 페이지와 무관)
+
+def _badges(db: Session, with_counts, recent_cnt, week_cnt, score) -> dict[int, str]:
+    """판매 중인 객실 전체에서 뱃지를 정한다(검색 조건 · 페이지와 무관). 뱃지 없는 방은 빠진다."""
     ranked = db.execute(
         with_counts.with_only_columns(Room.room_id, score.label("score"), week_cnt.label("week"), Room.created_at)
         .where(Room.is_active == "Y")
@@ -114,16 +102,56 @@ def recommend_rooms(
     ).all()
     best = {r.room_id for r in [r for r in ranked if r.score > 0][:BADGE_TOP]}
     hot = {r.room_id for r in sorted((r for r in ranked if r.week > 0), key=lambda r: (-r.week, r.room_id))[:BADGE_TOP]}
-    new_since = today - timedelta(days=NEW_DAYS)
+    new_since = today_kst() - timedelta(days=NEW_DAYS)
+    badges = {}
+    for r in ranked:
+        if r.room_id in best:
+            badges[r.room_id] = "BEST"
+        elif r.room_id in hot:
+            badges[r.room_id] = "HOT"
+        elif r.created_at and r.created_at.date() >= new_since:
+            badges[r.room_id] = "NEW"
+    return badges
 
-    def badge(room: Room) -> str | None:
-        if room.room_id in best:
-            return "BEST"
-        if room.room_id in hot:
-            return "HOT"
-        if room.created_at and room.created_at.date() >= new_since:
-            return "NEW"
-        return None
+
+def room_detail(db: Session, room: Room) -> RoomDetailOut:
+    """객실 상세: 객실 정보 + 사진 전부 + 뱃지 + 예약 수."""
+    with_counts, recent_cnt, total_cnt, week_cnt, score = _scoring(db)
+    row = db.execute(
+        with_counts.with_only_columns(recent_cnt, total_cnt, score).where(Room.room_id == room.room_id)
+    ).one()
+    out = RoomDetailOut.model_validate(room)
+    out.recent_reservations, out.total_reservations, out.score = int(row[0]), int(row[1]), round(float(row[2]), 2)
+    out.badge = _badges(db, with_counts, recent_cnt, week_cnt, score).get(room.room_id)
+    out.is_recommended = out.badge == "BEST"
+    out.photos = list(db.scalars(
+        select(AttachFile.saved_path)
+        .where(AttachFile.target_type == "ROOM", AttachFile.target_id == room.room_id)
+        .order_by(AttachFile.file_id)
+    ))
+    out.thumbnail_url = out.photos[0] if out.photos else None
+    return out
+
+
+def recommend_rooms(
+    db: Session,
+    *,
+    check_in: date | None,
+    check_out: date | None,
+    guests: int | None,
+    sort: RoomSort,
+    page: int,
+    size: int,
+) -> tuple[list[RecommendRoomOut], int]:
+    with_counts, recent_cnt, total_cnt, week_cnt, score = _scoring(db)
+    thumbnail = (
+        select(AttachFile.saved_path)
+        .where(AttachFile.target_type == "ROOM", AttachFile.target_id == Room.room_id)
+        .order_by(AttachFile.file_id)
+        .limit(1)
+        .scalar_subquery()
+    )
+    badges = _badges(db, with_counts, recent_cnt, week_cnt, score)
 
     conditions = [Room.is_active == "Y"]
     if guests:
@@ -150,7 +178,7 @@ def recommend_rooms(
         out.total_reservations = int(total_value)
         out.score = round(float(score_value), 2)
         out.thumbnail_url = thumbnail_value
-        out.badge = badge(room)
+        out.badge = badges.get(room.room_id)
         out.is_recommended = out.badge == "BEST"
         items.append(out)
     return items, total

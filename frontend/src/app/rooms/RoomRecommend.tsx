@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Pagination from "@/components/Pagination";
 import RoomCard from "@/components/RoomCard";
@@ -15,7 +16,13 @@ const SORTS: { value: RoomSort; label: string }[] = [
 ];
 
 export default function RoomRecommend() {
-  const [form, setForm] = useState({ checkIn: "", checkOut: "", guests: 2 });
+  // 객실 상세에서 "객실 추천"으로 돌아오면 주소의 검색 조건을 그대로 쓴다
+  const params = useSearchParams();
+  const [form, setForm] = useState(() => ({
+    checkIn: params.get("checkIn") ?? "",
+    checkOut: params.get("checkOut") ?? "",
+    guests: Number(params.get("guests")) || 2,
+  }));
   const [search, setSearch] = useState(form);
   const [sort, setSort] = useState<RoomSort>("recommend");
   const [page, setPage] = useState(1);
