@@ -177,3 +177,24 @@ def test_concurrent_cancel_and_approve_do_not_overwrite(client):
             text("SELECT status, canceled_at FROM reservation WHERE reservation_id = :id"), {"id": rid}
         ).one()
     assert status == "CANCELED" and canceled_at is not None
+
+
+def test_past_pending_can_only_be_canceled(client):
+    """체크인이 지난 대기 예약: 승인은 막고(묵지 않은 예약을 승인하지 않게) 취소로 정리할 수 있다.
+
+    지난 승인 예약은 이전처럼 취소 불가(실제로 묵은 기록).
+    """
+    past = add_reservation(TODAY - timedelta(days=1))
+    r = client.patch(f"{API}/{past}/approve", headers=ADMIN)
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "PAST_CHECK_IN"
+    assert r.json()["detail"]["message"] == "체크인이 지난 예약은 승인할 수 없습니다. 취소로 정리해 주세요."
+
+    canceled = client.patch(f"{API}/{past}/cancel", headers=ADMIN)
+    assert canceled.status_code == 200, canceled.text
+    assert canceled.json()["status"] == "CANCELED" and canceled.json()["canceledBy"] == 1
+
+
+def test_today_pending_can_still_be_approved(client):
+    today = add_reservation(TODAY, room_id=5)
+    assert client.patch(f"{API}/{today}/approve", headers=ADMIN).status_code == 200
