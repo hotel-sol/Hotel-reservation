@@ -20,6 +20,10 @@ const REASON_LABEL = { PAST: "지난 날", CLOSED: "휴무", BOOKED: "예약됨"
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
+/** 백엔드 reservation_service 의 MAX_NIGHTS · BOOKING_WINDOW_DAYS 와 같은 값 (바꾸면 둘 다) */
+export const MAX_NIGHTS = 30;
+const BOOKING_WINDOW_DAYS = 365;
+
 /** "2026-12-31" + 1 → "2027-01-01" (UTC 로 계산해서 시간대 영향 없음) */
 export function addDays(date: string, n: number): string {
   const d = new Date(`${date}T00:00:00Z`);
@@ -53,14 +57,14 @@ export function dayLabel(date: string): string {
 type DayMap = Map<string, CalendarDay>;
 
 /**
- * checkIn 에서 고를 수 있는 가장 늦은 체크아웃.
+ * checkIn 에서 고를 수 있는 가장 늦은 체크아웃 (최대 MAX_NIGHTS 박).
  * last: 그 날짜 (checkIn 자체가 막혀 있으면 null)
  * unknown: 아직 불러오지 않은 달에서 멈췄으면 true (그 달을 불러오면 더 늘어날 수 있음)
  */
 export function lastCheckout(byDay: DayMap, checkIn: string): { last: string | null; unknown: boolean } {
   let d = checkIn;
   let last: string | null = null;
-  for (let i = 0; i < 400; i++) {
+  for (let i = 0; i < MAX_NIGHTS; i++) {
     const info = byDay.get(d);
     if (!info) return { last, unknown: true };
     if (!info.available) return { last, unknown: false };
@@ -131,6 +135,8 @@ export default function StayCalendar({ cal, checkIn, checkOut, onChange }: Props
   }, [load, view, months]); // months: reload() 로 비워지면 다시 불러오기
 
   const pickingCheckOut = !!checkIn && !checkOut;
+  const windowEnd = addDays(cal.today, BOOKING_WINDOW_DAYS); // 이 날까지만 체크인 가능
+  const canCheckIn = (day: CalendarDay) => day.available && day.day <= windowEnd;
   const limit = pickingCheckOut ? lastCheckout(cal.byDay, checkIn).last : null;
 
   /** 체크아웃을 고르는 중이면 checkIn 다음 날 ~ limit 까지는 막힌 날이어도 고를 수 있다. */
@@ -138,7 +144,7 @@ export default function StayCalendar({ cal, checkIn, checkOut, onChange }: Props
 
   function pick(day: CalendarDay) {
     if (canCheckOut(day.day)) onChange(checkIn, day.day);
-    else if (day.available) onChange(day.day, ""); // 새로 체크인부터
+    else if (canCheckIn(day)) onChange(day.day, ""); // 새로 체크인부터
   }
 
   return (
@@ -150,6 +156,7 @@ export default function StayCalendar({ cal, checkIn, checkOut, onChange }: Props
           {!checkIn || checkOut ? "체크인 날짜를 고르세요" : "체크아웃 날짜를 고르세요"}
         </p>
         <button type="button" className="btn-outline px-3 py-1"
+          disabled={addMonths(view, 1) >= windowEnd.slice(0, 7)}
           onClick={() => setView(addMonths(view, 1))} aria-label="다음 달">›</button>
       </div>
 
@@ -169,7 +176,7 @@ export default function StayCalendar({ cal, checkIn, checkOut, onChange }: Props
                 {monthCells(month).map((date, i) => {
                   const day = date ? cal.byDay.get(date) : undefined;
                   if (!date || !day) return <div key={`blank-${month}-${i}`} />;
-                  const enabled = canCheckOut(date) || day.available;
+                  const enabled = canCheckOut(date) || canCheckIn(day);
                   const isEdge = date === checkIn || date === checkOut;
                   const inRange = !!checkIn && !!checkOut && date > checkIn && date < checkOut;
                   return (

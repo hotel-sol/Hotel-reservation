@@ -8,7 +8,7 @@ import { reservationsApi } from "@/lib/api/reservations";
 import { roomsApi } from "@/lib/api/rooms";
 import { won } from "@/lib/format";
 import type { Quote, Room } from "@/types/api";
-import StayCalendar, { addDays, dayLabel, lastCheckout, useRoomCalendar } from "./StayCalendar";
+import StayCalendar, { addDays, dayLabel, lastCheckout, MAX_NIGHTS, useRoomCalendar } from "./StayCalendar";
 
 export default function ReservationForm() {
   const router = useRouter();
@@ -45,6 +45,8 @@ export default function ReservationForm() {
   if (form.checkInDate && form.checkOutDate) {
     const { last, unknown } = lastCheckout(cal.byDay, form.checkInDate);
     if (form.checkOutDate <= form.checkInDate) rangeError = "체크아웃은 체크인 다음 날부터 선택할 수 있습니다.";
+    else if (addDays(form.checkInDate, MAX_NIGHTS) < form.checkOutDate)
+      rangeError = `한 번에 최대 ${MAX_NIGHTS}박까지 예약할 수 있습니다.`;
     else if (!(last && form.checkOutDate <= last) && !unknown)
       rangeError = "선택한 기간에 예약할 수 없는 날이 있습니다. 달력에서 날짜를 다시 골라 주세요.";
   }

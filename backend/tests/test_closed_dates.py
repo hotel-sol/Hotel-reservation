@@ -17,7 +17,8 @@ ADMIN = {"Cookie": f"{COOKIE}={create_session_token(1, SEED_PASSWORD)}"}
 GUEST = {"Cookie": f"{COOKIE}={create_session_token(2, SEED_PASSWORD)}"}
 API = "/api/admin/closed-dates"
 TODAY = today_kst()
-D1 = TODAY + timedelta(days=400)  # 시드(2026-12)와 겹치지 않는 미래 날짜
+# 시드(2026-12 예약)와 겹치지 않고, 예약 가능 범위(오늘부터 365일, reservation_service.BOOKING_WINDOW_DAYS) 안인 미래 날짜
+D1 = max(TODAY + timedelta(days=30), date(2027, 1, 4))
 
 
 def add_reservation(room_id, check_in, nights, status="PENDING"):

@@ -68,6 +68,8 @@ def available_dates(room_id: int, db: DB, month: str = Query(..., pattern=r"^\d{
     year, mon = (int(x) for x in month.split("-"))
     if not 1 <= mon <= 12:
         fail(400, "INVALID_MONTH", "월은 01~12 사이로 입력하세요.")
+    if not 2000 <= year <= 2100:  # 0000 년 등은 날짜로 만들 수 없어 500 이 났다
+        fail(400, "INVALID_MONTH", "연도는 2000~2100 사이로 입력하세요.")
     first, last = month_range(year, mon)
     return AvailableDatesOut(
         month=month,
