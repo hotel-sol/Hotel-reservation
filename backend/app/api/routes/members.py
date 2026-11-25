@@ -1,14 +1,15 @@
 """회원 — 회원가입 · 로그인 · 로그아웃 · 내 정보 · 비밀번호 변경 · 탈퇴 · 비밀번호 찾기
 
-- 로그인 · 비밀번호 확인을 5번 틀리면 10분 잠금(429).
+- 로그인 · 비밀번호 확인을 10분 안에 5번 틀리면 10분 잠금(429). 기록은 login_attempt 테이블.
 - 비밀번호를 바꾸면 다른 기기의 로그인은 끊기고 지금 기기는 유지.
 - 탈퇴: 예약 기록(FK)을 지키려고 행은 남기고 개인정보만 지운다.
 """
 import re
-import time
 
 from fastapi import APIRouter, Query, Response
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from app.api.deps import DB, CurrentMember
 from app.core.config import get_settings
@@ -37,25 +38,38 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 PHONE_RE = re.compile(r"^[0-9-]{9,20}$")
 
 # ---------- 틀린 횟수 잠금 ----------
-# ponytail: 서버 메모리에 기록. 서버를 다시 켜거나 여러 대로 늘리면 초기화된다. 필요하면 DB/Redis로.
+# 실패 기록은 login_attempt 테이블에 남긴다(1-A3). 서버를 다시 켜거나 여러 대로 늘려도 잠금이 유지된다.
+# 시간은 DB 시계(LOCALTIMESTAMP) 하나로만 비교해서 서버 · DB 시간대가 달라도 맞는다.
+_RECENT = "attempt_key = :k AND failed_at >= LOCALTIMESTAMP - make_interval(secs => :s)"
+
+# 옛 메모리 잠금 이름. tests/conftest.py(DB 담당 파일, 규칙 R1)가 아직 비우고 있어서 빈 채로 남겨 둔다.
 _fails: dict[str, list[float]] = {}
 
 
-def check_not_locked(key: str) -> None:
-    recent = [t for t in _fails.get(key, []) if t > time.time() - LOCK_SECONDS]
-    _fails[key] = recent
-    if len(recent) >= MAX_FAILS:
+def check_not_locked(db: Session, key: str) -> None:
+    db.execute(text("DELETE FROM login_attempt WHERE attempt_key = :k "
+                    "AND failed_at < LOCALTIMESTAMP - make_interval(secs => :s)"), {"k": key, "s": LOCK_SECONDS})
+    recent = db.scalar(text(f"SELECT COUNT(*) FROM login_attempt WHERE {_RECENT}"), {"k": key, "s": LOCK_SECONDS})
+    db.commit()
+    if recent >= MAX_FAILS:
         fail(429, "TOO_MANY_ATTEMPTS", "여러 번 틀려서 10분 동안 잠겼습니다. 잠시 후 다시 시도해 주세요.")
 
 
-def record_fail(key: str) -> None:
-    _fails.setdefault(key, []).append(time.time())
+def record_fail(db: Session, key: str) -> None:
+    # 바로 commit: 뒤이어 fail() 로 요청이 끝나도 기록은 남아야 한다
+    db.execute(text("INSERT INTO login_attempt (attempt_key) VALUES (:k)"), {"k": key})
+    db.commit()
 
 
-def check_password(member: Member, password: str, key: str, message: str) -> None:
-    check_not_locked(key)
+def clear_fails(db: Session, key: str) -> None:
+    db.execute(text("DELETE FROM login_attempt WHERE attempt_key = :k"), {"k": key})
+    db.commit()
+
+
+def check_password(db: Session, member: Member, password: str, key: str, message: str) -> None:
+    check_not_locked(db, key)
     if not verify_password(password, member.password):
-        record_fail(key)
+        record_fail(db, key)
         fail(400, "WRONG_PASSWORD", message)
 
 
@@ -100,6 +114,17 @@ def ensure_unique(db, login_id: str | None, email: str | None, exclude_id: int |
         fail(409, "DUPLICATE_EMAIL", "이미 가입된 이메일입니다.")
 
 
+def commit_unique(db, login_id: str | None, email: str | None, exclude_id: int | None = None) -> None:
+    """두 사람이 거의 동시에 같은 아이디 · 이메일로 저장하면 ensure_unique 를 둘 다 통과하고
+    DB의 lower() UNIQUE 인덱스가 늦은 쪽을 막는다. 그때도 500 대신 같은 409 문구로 답한다."""
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        ensure_unique(db, login_id, email, exclude_id)
+        raise
+
+
 # ---------- 가입 · 로그인 · 로그아웃 ----------
 LOGIN_ID_RE = re.compile(r"^[A-Za-z0-9_]{4,50}$")  # SignupRequest.login_id 와 같은 규칙
 
@@ -129,7 +154,7 @@ def signup(body: SignupRequest, db: DB):
         role="USER",  # 가입은 항상 USER. 관리자는 python -m app.db.create_admin
     )
     db.add(member)
-    db.commit()
+    commit_unique(db, body.login_id, email)
     db.refresh(member)
     return member
 
@@ -137,12 +162,12 @@ def signup(body: SignupRequest, db: DB):
 @router.post("/login", response_model=MemberOut)
 def login(body: LoginRequest, response: Response, db: DB):
     key = f"login:{body.login_id.lower()}"
-    check_not_locked(key)
+    check_not_locked(db, key)
     member = db.scalar(select(Member).where(Member.login_id == body.login_id))
     if member is None or not verify_password(body.password, member.password):
-        record_fail(key)
+        record_fail(db, key)
         fail(401, "LOGIN_FAILED", "아이디 또는 비밀번호가 올바르지 않습니다.")
-    _fails.pop(key, None)
+    clear_fails(db, key)
     set_session(response, member)
     return member
 
@@ -164,13 +189,13 @@ def update_me(body: ProfileUpdate, member: CurrentMember, db: DB):
     name, phone, email = clean_profile(body.name, body.phone, body.email)
     ensure_unique(db, None, email, exclude_id=member.member_id)
     member.name, member.phone, member.email = name, phone, email
-    db.commit()
+    commit_unique(db, None, email, exclude_id=member.member_id)
     return member
 
 
 @router.put("/me/password", status_code=204)
 def change_password(body: PasswordChange, response: Response, member: CurrentMember, db: DB):
-    check_password(member, body.current_password, f"password:{member.member_id}", "현재 비밀번호가 맞지 않습니다.")
+    check_password(db, member, body.current_password, f"password:{member.member_id}", "현재 비밀번호가 맞지 않습니다.")
     member.password = hash_password(body.new_password)
     db.commit()
     set_session(response, member)  # 다른 기기는 끊기고, 지금 화면은 새 쿠키로 로그인 유지
@@ -180,7 +205,7 @@ def change_password(body: PasswordChange, response: Response, member: CurrentMem
 def withdraw(body: WithdrawRequest, response: Response, member: CurrentMember, db: DB):
     if member.role == "ADMIN":
         fail(400, "ADMIN_CANNOT_WITHDRAW", "관리자 계정은 탈퇴할 수 없습니다.")
-    check_password(member, body.password, f"password:{member.member_id}", "비밀번호가 맞지 않습니다.")
+    check_password(db, member, body.password, f"password:{member.member_id}", "비밀번호가 맞지 않습니다.")
     live = db.scalar(
         select(func.count()).where(
             Reservation.member_id == member.member_id,
@@ -205,7 +230,7 @@ def reset_password(body: PasswordResetRequest, db: DB):
     # 관리자 계정은 여기서 바꾸지 않는다: 이메일만 알면 관리자 계정을 가져갈 수 있어서(11-25 조준엽 제보).
     # 틀렸을 때와 같은 문구로 막아서 "관리자 아이디"라는 힌트도 주지 않는다. 관리자 비밀번호는 create_admin 으로.
     key = f"reset:{body.login_id.lower()}"
-    check_not_locked(key)
+    check_not_locked(db, key)
     member = db.scalar(select(Member).where(Member.login_id == body.login_id))
     if (
         member is None
@@ -213,7 +238,7 @@ def reset_password(body: PasswordResetRequest, db: DB):
         or not member.email
         or member.email.lower() != body.email.strip().lower()
     ):
-        record_fail(key)
+        record_fail(db, key)
         fail(400, "NOT_MATCHED", "아이디와 가입한 이메일이 맞지 않습니다.")
     member.password = hash_password(body.new_password)
     db.commit()

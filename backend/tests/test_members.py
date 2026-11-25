@@ -93,9 +93,42 @@ def test_login_locks_after_five_failures(client):
     for _ in range(5):
         assert login(client, password="wrong-pass").status_code == 401
     assert login(client).status_code == 429  # 맞는 비밀번호여도 잠김
+    assert login(client, "GUEST01").status_code == 429  # 대소문자만 바꿔도 같은 잠금
     from app.api.routes import members
-    members._fails.clear()  # 10분 지난 것으로 치고
+    members._fails.clear()  # 옛 메모리 기록을 비워도(= 서버 재시작) 잠금은 DB에 남아 있다
+    assert login(client).status_code == 429
+    sql("UPDATE login_attempt SET failed_at = failed_at - INTERVAL '11 minutes'")  # 10분 지난 것으로 치고
     assert login(client).status_code == 200
+    assert sql("SELECT COUNT(*) AS n FROM login_attempt")[0]["n"] == 0  # 성공하면 기록을 지운다
+
+
+def test_wrong_current_password_locks_too(client):
+    signup(client)
+    login(client)
+    body = {"currentPassword": "wrong-pass", "newPassword": "newpass123"}
+    for _ in range(5):
+        assert client.put("/api/members/me/password", json=body).status_code == 400
+    body["currentPassword"] = "password123"
+    assert client.put("/api/members/me/password", json=body).json()["detail"]["code"] == "TOO_MANY_ATTEMPTS"
+
+
+def test_duplicate_at_same_moment_gives_same_message(client, monkeypatch):
+    """두 사람이 동시에 가입해 앞 검사를 둘 다 통과해도, DB가 막은 뒤 같은 409 문구로 답한다(500 아님)."""
+    from app.api.routes import members
+    signup(client, email="a@example.com")
+    real, calls = members.ensure_unique, []
+
+    def first_check_misses(*args, **kw):  # 앞 검사는 "아직 없음"으로 지나가게(동시에 누른 상황)
+        calls.append(1)
+        if len(calls) > 1:
+            real(*args, **kw)
+
+    monkeypatch.setattr(members, "ensure_unique", first_check_misses)
+    r = signup(client, "GUEST01")
+    assert r.status_code == 409 and r.json()["detail"]["message"] == "이미 사용 중인 아이디입니다."
+    calls.clear()
+    r = signup(client, "other1", email="A@example.com")
+    assert r.status_code == 409 and r.json()["detail"]["message"] == "이미 가입된 이메일입니다."
 
 
 def test_update_profile(client):

@@ -251,7 +251,7 @@ def test_view_count_without_login_and_404_for_hidden_or_missing(client):
     hidden = room("B", active="N")
     assert client.post(f"/api/rooms/{a}/view").status_code == 204
     assert client.post(f"/api/rooms/{a}/view").status_code == 204
-    assert get(client)["items"][0]["viewCount"] == 2
+    assert get(client)["items"][0]["viewCount"] == 1  # 같은 손님 · 같은 날은 1번(1-A1, test_room_view.py)
     for room_id in (hidden, 999999):
         r = client.post(f"/api/rooms/{room_id}/view")
         assert r.status_code == 404 and r.json()["detail"]["code"] == "ROOM_NOT_FOUND"
