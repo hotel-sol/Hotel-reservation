@@ -12,7 +12,7 @@ export const membersApi = {
   // 가입 전 아이디 중복확인. 형식이 틀리면 400 INVALID_LOGIN_ID
   checkId: (loginId: string) =>
     api<{ available: boolean; message: string }>(`/members/check-id?loginId=${encodeURIComponent(loginId)}`),
-  signup: (body: { loginId: string; password: string; name: string; phone?: string; email?: string }) =>
+  signup: (body: { loginId: string; password: string; name: string; phone: string; email?: string }) =>
     api<Member>("/members/signup", { method: "POST", json: body }),
 
   // 마이페이지

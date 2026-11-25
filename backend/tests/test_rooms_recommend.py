@@ -24,7 +24,7 @@ def run(sql, **params):
 
 @pytest.fixture(autouse=True)
 def guest(empty_db):
-    run("INSERT INTO member (login_id, password, name) VALUES ('guest1', 'x', '손님')")
+    run("INSERT INTO member (login_id, password, name, phone) VALUES ('guest1', 'x', '손님', '010-1000-0001')")
 
 
 OLD = datetime.now() - timedelta(days=room_service.NEW_DAYS + 1)  # NEW 뱃지가 안 붙는 등록일

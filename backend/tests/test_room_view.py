@@ -42,7 +42,7 @@ def test_guests_together_counted_once_a_day(client, rooms):
 def test_each_member_counted_once_a_day(client, rooms):
     view(client)  # 비회원 1
     for login_id in ("guest01", "guest02"):
-        client.post("/api/members/signup", json={"loginId": login_id, "password": "password123", "name": "손님"})
+        client.post("/api/members/signup", json={"loginId": login_id, "password": "password123", "name": "손님", "phone": "010-1234-5678"})
         client.post("/api/members/login", json={"loginId": login_id, "password": "password123"})
         view(client)
         view(client)  # 같은 회원 · 같은 날은 1번

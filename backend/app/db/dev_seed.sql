@@ -2,9 +2,9 @@
 -- 아래 두 계정은 비밀번호가 진짜 해시가 아니라 로그인할 수 없다(테스트용 자리).
 -- 로그인할 관리자는 .env 의 ADMIN_PASSWORD 로 init_db 가 만드는 admin01 을 쓴다.
 
-INSERT INTO member (login_id, password, name, role) VALUES
-  ('admin', 'not-a-real-hash', '관리자', 'ADMIN'),
-  ('guest1', 'not-a-real-hash', '손님1', 'USER');
+INSERT INTO member (login_id, password, name, phone, role) VALUES
+  ('admin', 'not-a-real-hash', '관리자', '010-0000-0001', 'ADMIN'),
+  ('guest1', 'not-a-real-hash', '손님1', '010-1000-0001', 'USER');
 
 INSERT INTO room (room_name, room_type, max_guest, price, description, is_active) VALUES
   ('101호', 'STANDARD', 2, 80000, '시티뷰', 'Y'),
