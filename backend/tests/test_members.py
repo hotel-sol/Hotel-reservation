@@ -1,11 +1,15 @@
 """회원: 가입 · 로그인 · 잠금 · 내 정보 · 비밀번호 변경 · 탈퇴 · 비밀번호 찾기 · 관리자 만들기."""
+from datetime import timedelta
+
 import pytest
 from sqlalchemy import text
 
 from app.core.config import get_settings
+from app.core.dates import today_kst
 from app.core.security import verify_password
 from app.db import create_admin
 from app.db.session import engine
+from tests import helpers
 
 pytestmark = pytest.mark.usefixtures("empty_db")
 COOKIE = get_settings().session_cookie
@@ -128,13 +132,11 @@ def test_withdraw_keeps_reservation_rows(client):
     login(client)
     me = client.get("/api/members/me").json()
     sql("INSERT INTO room (room_name, room_type, max_guest, price) VALUES ('101호', 'STANDARD', 2, 80000)")
-    sql("INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date, guest_count, total_price, status)"
-        " VALUES (:mid, 1, CURRENT_DATE + 5, CURRENT_DATE + 6, 1, 80000, 'PENDING')",
-        mid=me["memberId"])
+    helpers.add_reservation(1, today_kst() + timedelta(days=5), member_id=me["memberId"])
     r = client.post("/api/members/me/withdraw", json={"password": "password123"})
     assert r.json()["detail"]["code"] == "HAS_RESERVATION"  # 진행 중인 예약이 있으면 불가
 
-    sql("UPDATE reservation SET status = 'CANCELED'")
+    sql("UPDATE reservation SET status = 'CANCELED', canceled_at = now()")
     assert client.post("/api/members/me/withdraw", json={"password": "wrong-pass"}).status_code == 400
     assert client.post("/api/members/me/withdraw", json={"password": "password123"}).status_code == 204
     client.cookies.clear()
