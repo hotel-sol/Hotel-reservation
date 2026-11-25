@@ -17,7 +17,7 @@ CREATE TABLE member (
     login_id    VARCHAR(50)  NOT NULL,
     password    VARCHAR(255) NOT NULL,
     name        VARCHAR(50)  NOT NULL,
-    phone       VARCHAR(20),
+    phone       VARCHAR(20) NOT NULL,  -- 필수(#108). 탈퇴하면 빈 문자열로 지운다
     email       VARCHAR(100),
     role        VARCHAR(10)  NOT NULL DEFAULT 'USER',
     created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,

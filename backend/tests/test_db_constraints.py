@@ -58,3 +58,10 @@ def test_closed_date_reason_column_removed_and_grade_base_guest():
     assert "reason" not in cols and "closure_id" in cols
     guests = dict(sql("SELECT grade_code, base_guest FROM room_grade").all())
     assert guests == {"S": 4, "A": 2, "B": 2, "C": 2}
+
+
+def test_member_phone_is_required_by_db():
+    """전화번호 필수(#108): 코드를 거치지 않고 넣어도 phone 이 비면 저장 불가(23502 NOT NULL)."""
+    with pytest.raises(IntegrityError) as e:
+        sql("INSERT INTO member (login_id, password, name) VALUES ('nophone', 'x', '손님')")
+    assert sqlstate(e.value) == "23502"
