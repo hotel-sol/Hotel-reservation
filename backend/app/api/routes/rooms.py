@@ -1,14 +1,10 @@
 """객실 (손님) — ROOM-001 객실 추천, RSV-001 객실 정보"""
-import re
-import secrets
 from datetime import date
-from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Query, Response
+from fastapi import APIRouter, Query
 from sqlalchemy import text, update
 
 from app.api.deps import DB, SessionCookie, member_from_cookie
-from app.core.config import get_settings
 from app.core.dates import today_kst
 from app.schemas.room import RoomDetailOut
 from app.services.room_service import room_detail
@@ -31,7 +27,7 @@ def recommend(
     check_out: date | None = Query(None, alias="checkOut"),
     guests: int | None = Query(None, ge=1),
     sort: RoomSort = "recommend",
-    page: int = Query(1, ge=1),
+    page: int = Query(1, ge=1, le=10000),  # 아주 큰 값이면 OFFSET 범위를 넘어 500 → 상한
     size: int = Query(6, ge=1, le=50),
 ):
     if (check_in is None) != (check_out is None):
@@ -55,32 +51,16 @@ def get_room(room_id: int, db: DB):
     return room_detail(db, room)
 
 
-VISITOR_COOKIE = "hotel_visitor"  # 비회원 번호표(이름 · 개인정보 없음, 무작위 32자)
-VISITOR_RE = re.compile(r"^[0-9a-f]{32}$")
-
-
 @router.post("/{room_id}/view", status_code=204)
-def increase_view(
-    room_id: int,
-    db: DB,
-    response: Response,
-    hotel_session: SessionCookie = None,
-    visitor: Annotated[str | None, Cookie(alias=VISITOR_COOKIE)] = None,
-):
-    """조회수(1-A1): 같은 사람 · 같은 방 · 같은 날(한국 날짜)은 1번만 센다.
-    회원은 M:<member_id>, 비회원은 G:<번호표 쿠키>. room.view_count 는 뜻 그대로(2번 화면이 읽음)."""
+def increase_view(room_id: int, db: DB, hotel_session: SessionCookie = None):
+    """조회수(1-A1): 같은 사람 · 같은 방 · 같은 날(한국 날짜)은 1번만 센다. room.view_count 는 뜻 그대로(2번 화면이 읽음).
+    회원은 M:<member_id> 로 한 사람씩. 비회원은 모두 합쳐 "G" 하나로 센다(방마다 하루 최대 +1):
+    번호표 쿠키로 나누면 쿠키를 버리고 계속 부르는 프로그램이 무한히 올릴 수 있어서(#67-2)."""
     room = db.get(Room, room_id)
     if room is None or room.is_active != "Y":
         fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
     member = member_from_cookie(db, hotel_session)
-    if member is not None:
-        viewer = f"M:{member.member_id}"
-    else:
-        if not visitor or not VISITOR_RE.match(visitor):
-            visitor = secrets.token_hex(16)
-            response.set_cookie(VISITOR_COOKIE, visitor, max_age=365 * 24 * 3600, httponly=True,
-                                samesite="lax", secure=get_settings().app_env != "local")
-        viewer = f"G:{visitor}"
+    viewer = f"M:{member.member_id}" if member is not None else "G"
     first = db.execute(
         text("INSERT INTO room_view (room_id, viewer_key, view_date) VALUES (:r, :v, :d) ON CONFLICT DO NOTHING"),
         {"r": room_id, "v": viewer, "d": today_kst()},

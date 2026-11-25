@@ -66,6 +66,9 @@ def test_signup_rules(client):
     assert signup(client, "other2", email="x@example.com").json()["detail"]["code"] == "DUPLICATE_EMAIL"
     assert signup(client, "ab").status_code == 422  # 아이디 4자 미만
     assert signup(client, "short_pw", password="1234567").status_code == 422
+    assert signup(client, "a" * 21).status_code == 422  # 아이디 20자까지
+    assert signup(client, "long_pw", password="x" * 65).status_code == 422  # 비밀번호 64자까지
+    assert signup(client, "a" * 20, password="x" * 64).status_code == 201
     assert signup(client, "bad_mail", email="not-mail").json()["detail"]["code"] == "INVALID_EMAIL"
     r = client.post("/api/members/signup",
                     json={"loginId": "sneaky", "password": "password123", "name": "x", "role": "ADMIN"})
@@ -100,6 +103,60 @@ def test_login_locks_after_five_failures(client):
     sql("UPDATE login_attempt SET failed_at = failed_at - INTERVAL '11 minutes'")  # 10분 지난 것으로 치고
     assert login(client).status_code == 200
     assert sql("SELECT COUNT(*) AS n FROM login_attempt")[0]["n"] == 0  # 성공하면 기록을 지운다
+
+
+def other_device():
+    """다른 사람(다른 브라우저): 쿠키를 따로 가진 새 클라이언트"""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    return TestClient(app)
+
+
+def test_someone_else_cannot_lock_me_out_of_my_device(client):
+    """#67-3: 남이 내 아이디로 일부러 5번 틀려도, 전에 로그인했던 내 기기에서는 들어온다."""
+    signup(client)
+    assert login(client).status_code == 200  # 내 기기: 기기 표(hotel_device)를 받는다
+    assert client.cookies.get("hotel_device")
+    client.post("/api/members/logout")
+
+    attacker = other_device()
+    for _ in range(5):
+        assert login(attacker, password="wrong-pass").status_code == 401
+    assert login(attacker).status_code == 429  # 처음 보는 기기는 잠김(맞는 비밀번호여도)
+    assert login(other_device()).status_code == 429  # 다른 새 기기도 잠김
+    assert login(client).status_code == 200  # 내 기기는 들어옴
+
+
+def test_device_ticket_does_not_help_guessing(client):
+    """기기 표가 있어도 그 기기에서 5번 틀리면 잠기고, 남의 계정에는 내 기기 표가 통하지 않는다."""
+    signup(client)
+    signup(client, "victim01")
+    login(client)  # guest01 의 기기 표
+    for _ in range(5):
+        assert login(client, "victim01", "wrong-pass").status_code == 401
+    assert login(client, "victim01", "password123").status_code == 429  # victim01 은 아이디 잠금 그대로
+    for _ in range(5):
+        assert login(client, password="wrong-pass").status_code == 401
+    assert login(client).status_code == 429  # 내 기기도 5번 틀리면 잠김
+    forged = other_device()
+    forged.cookies.set("hotel_device", "forged.token")
+    r = login(forged)  # 가짜 표 = 처음 보는 기기: 아이디 잠금(안 걸려 있음)으로 세서 들어오고, 진짜 표를 새로 받는다
+    assert r.status_code == 200 and r.cookies.get("hotel_device") not in (None, "forged.token")
+
+
+def test_too_long_login_input_is_422_not_500(client):
+    assert login(client, "a" * 100, "x").status_code == 422
+    assert login(client, "guest01", "x" * 101).status_code == 422
+
+
+def test_parallel_wrong_logins_stop_at_five(client):
+    """동시에 10번 보내도 5번만 확인하고 나머지는 잠김(시도를 한 줄로 세움)."""
+    from concurrent.futures import ThreadPoolExecutor
+    signup(client)
+    with ThreadPoolExecutor(10) as pool:
+        codes = list(pool.map(lambda _: login(other_device(), password="wrong-pass").status_code, range(10)))
+    assert sorted(codes) == [401] * 5 + [429] * 5
+    assert sql("SELECT COUNT(*) AS n FROM login_attempt")[0]["n"] == 5
 
 
 def test_wrong_current_password_locks_too(client):
@@ -240,7 +297,7 @@ def test_check_id_available_then_taken_ignoring_case(client):
     assert check_id(client, "guest02").json()["available"] is True
 
 
-@pytest.mark.parametrize("login_id", ["abc", "한글아이디", "bad id!", "a" * 51])
+@pytest.mark.parametrize("login_id", ["abc", "한글아이디", "bad id!", "a" * 21])
 def test_check_id_rejects_bad_format(client, login_id):
     r = check_id(client, login_id)
     assert r.status_code == 400 and r.json()["detail"]["code"] == "INVALID_LOGIN_ID"

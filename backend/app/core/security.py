@@ -52,3 +52,28 @@ def read_session_token(token: str) -> tuple[int, str] | None:
     if not isinstance(data, dict) or "mid" not in data or "pw" not in data:
         return None
     return data["mid"], data["pw"]
+
+
+# ---------- 기기 기억(로그인 잠금용, #67-3) ----------
+# 로그인에 성공한 기기에 "이 기기는 N번 회원이 쓴 적 있음" 표를 서명해서 준다.
+# 남이 내 아이디로 일부러 틀려 잠가도, 이 표가 있는 내 기기는 따로 센다(OWASP device cookie).
+DEVICE_SECONDS = 365 * 24 * 3600
+
+
+def _device_serializer() -> URLSafeTimedSerializer:
+    return URLSafeTimedSerializer(get_settings().session_secret, salt="hotel-device")
+
+
+def create_device_token(member_id: int) -> str:
+    return _device_serializer().dumps({"mid": member_id, "d": secrets.token_hex(8)})
+
+
+def read_device_token(token: str) -> tuple[int, str] | None:
+    """서명 · 만료가 맞으면 (회원번호, 기기 번호)."""
+    try:
+        data = _device_serializer().loads(token, max_age=DEVICE_SECONDS)
+    except (BadSignature, SignatureExpired):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("mid"), int) or not isinstance(data.get("d"), str):
+        return None
+    return data["mid"], data["d"][:16]

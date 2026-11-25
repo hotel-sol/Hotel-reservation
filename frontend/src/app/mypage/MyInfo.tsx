@@ -178,13 +178,13 @@ function PasswordCard() {
         <PasswordInput {...fieldProps("pw-current", undefined, false)} value={form.current} onChange={set("current")}
           required autoComplete="current-password" />
       </Field>
-      <Field id="pw-next" label="새 비밀번호" hint="8자 이상">
+      <Field id="pw-next" label="새 비밀번호" hint="8~64자">
         <PasswordInput {...fieldProps("pw-next")} value={form.next} onChange={set("next")}
-          required minLength={8} maxLength={100} autoComplete="new-password" />
+          required minLength={8} maxLength={64} autoComplete="new-password" />
       </Field>
       <Field id="pw-confirm" label="새 비밀번호 확인" error={mismatch}>
         <PasswordInput {...fieldProps("pw-confirm", mismatch, Boolean(mismatch))} value={form.confirm} onChange={set("confirm")}
-          required minLength={8} maxLength={100} autoComplete="new-password" />
+          required minLength={8} maxLength={64} autoComplete="new-password" />
       </Field>
       <button className="btn-primary w-full">비밀번호 변경</button>
     </form>

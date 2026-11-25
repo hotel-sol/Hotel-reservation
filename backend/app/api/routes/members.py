@@ -1,13 +1,15 @@
 """회원 — 회원가입 · 로그인 · 로그아웃 · 내 정보 · 비밀번호 변경 · 탈퇴 · 비밀번호 찾기
 
 - 로그인 · 비밀번호 확인을 10분 안에 5번 틀리면 10분 잠금(429). 기록은 login_attempt 테이블.
+  로그인에 성공한 적 있는 기기는 따로 세서, 남이 일부러 잠가도 주인은 들어올 수 있다.
 - 비밀번호 찾기는 시연 전까지 꺼 둔다(#67-1).
 - 비밀번호를 바꾸면 다른 기기의 로그인은 끊기고 지금 기기는 유지.
 - 탈퇴: 예약 기록(FK)을 지키려고 행은 남기고 개인정보만 지운다.
 """
 import re
+from typing import Annotated
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, Cookie, Query, Response
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -16,7 +18,14 @@ from app.api.deps import DB, CurrentMember
 from app.core.config import get_settings
 from app.core.dates import today_kst
 from app.core.exceptions import fail
-from app.core.security import create_session_token, hash_password, verify_password
+from app.core.security import (
+    DEVICE_SECONDS,
+    create_device_token,
+    create_session_token,
+    hash_password,
+    read_device_token,
+    verify_password,
+)
 from app.models import Member, Reservation
 from app.models.reservation import LIVE_STATUSES
 from app.schemas.common import Message
@@ -47,11 +56,15 @@ _fails: dict[str, list[float]] = {}
 
 
 def check_not_locked(db: Session, key: str) -> None:
+    """같은 key 로 동시에 여러 번 보내도 5번을 넘지 않게, 이 key 의 시도를 한 줄로 세운다.
+    (DB 잠금 pg_advisory_xact_lock: 이 요청이 commit/rollback 할 때까지 같은 key 의 다음 요청은 기다린다.
+    그래서 호출한 쪽은 비밀번호 확인 뒤 record_fail · clear_fails · commit 중 하나로 끝내야 한다.)"""
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": key})
     db.execute(text("DELETE FROM login_attempt WHERE attempt_key = :k "
                     "AND failed_at < LOCALTIMESTAMP - make_interval(secs => :s)"), {"k": key, "s": LOCK_SECONDS})
     recent = db.scalar(text(f"SELECT COUNT(*) FROM login_attempt WHERE {_RECENT}"), {"k": key, "s": LOCK_SECONDS})
-    db.commit()
     if recent >= MAX_FAILS:
+        db.rollback()
         fail(429, "TOO_MANY_ATTEMPTS", "여러 번 틀려서 10분 동안 잠겼습니다. 잠시 후 다시 시도해 주세요.")
 
 
@@ -126,7 +139,7 @@ def commit_unique(db, login_id: str | None, email: str | None, exclude_id: int |
 
 
 # ---------- 가입 · 로그인 · 로그아웃 ----------
-LOGIN_ID_RE = re.compile(r"^[A-Za-z0-9_]{4,50}$")  # SignupRequest.login_id 와 같은 규칙
+LOGIN_ID_RE = re.compile(r"^[A-Za-z0-9_]{4,20}$")  # SignupRequest.login_id 와 같은 규칙
 
 
 @router.get("/check-id", response_model=IdCheckOut)
@@ -134,7 +147,7 @@ def check_id(db: DB, login_id: str = Query(alias="loginId")):
     """가입 전 아이디 중복확인. 대소문자는 같은 것으로 본다(가입 때 ensure_unique 와 같은 기준)."""
     login_id = login_id.strip()
     if not LOGIN_ID_RE.match(login_id):
-        fail(400, "INVALID_LOGIN_ID", "아이디는 영문 · 숫자 · _ 4~50자입니다.")
+        fail(400, "INVALID_LOGIN_ID", "아이디는 영문 · 숫자 · _ 4~20자입니다.")
     taken = db.scalar(select(Member.member_id).where(func.lower(Member.login_id) == login_id.lower())) is not None
     if taken:
         return IdCheckOut(available=False, message="이미 사용 중인 아이디입니다.")
@@ -159,18 +172,38 @@ def signup(body: SignupRequest, db: DB):
     return member
 
 
+DEVICE_COOKIE = "hotel_device"
+_DUMMY_HASH = hash_password("timing-equalizer")  # 어떤 비밀번호와도 맞지 않는 값(서버 켤 때 한 번 만듦)
+
+
 @router.post("/login", response_model=MemberOut)
-def login(body: LoginRequest, response: Response, db: DB):
-    # 잠금은 아이디마다. (아이디, 접속 주소)로 나누는 안(#67-3)은 Next 프록시가 접속 주소를 붙여 주지 않고
-    # 손님이 보낸 X-Forwarded-For 를 그대로 넘겨서, 주소를 꾸며 잠금을 피할 수 있어 쓰지 않았다(11-25 확인).
-    key = f"login:{body.login_id.lower()}"
-    check_not_locked(db, key)
+def login(
+    body: LoginRequest,
+    response: Response,
+    db: DB,
+    device: Annotated[str | None, Cookie(alias=DEVICE_COOKIE)] = None,
+):
+    # 잠금(10분 안 5번)은 두 가지로 센다(#67-3):
+    #  - 이 아이디로 로그인에 성공한 적 있는 기기(서명된 hotel_device 쿠키) → 그 기기만 따로 센다
+    #  - 처음 보는 기기 → 아이디 하나로 함께 센다
+    # 그래서 남이 내 아이디로 일부러 5번 틀려도, 전에 쓰던 내 기기에서는 들어올 수 있다.
+    # 비밀번호 맞혀 보기는 그대로 막힌다(기기 표는 로그인에 성공해야만 받을 수 있음).
+    # (아이디, IP)로 나누지 않은 까닭: Next /api 프록시가 손님이 보낸 X-Forwarded-For 를 그대로 넘겨서 꾸밀 수 있다.
     member = db.scalar(select(Member).where(Member.login_id == body.login_id))
-    if member is None or not verify_password(body.password, member.password):
+    known = read_device_token(device) if device else None
+    trusted = member is not None and known is not None and known[0] == member.member_id
+    key = f"device:{member.member_id}:{known[1]}" if trusted else f"login:{body.login_id.lower()}"
+    check_not_locked(db, key)
+    # 없는 아이디도 같은 시간이 걸리게 가짜 해시로 한 번 확인한다(응답 속도로 아이디가 있는지 알아내기 막기)
+    if not verify_password(body.password, member.password if member else _DUMMY_HASH) or member is None:
         record_fail(db, key)
         fail(401, "LOGIN_FAILED", "아이디 또는 비밀번호가 올바르지 않습니다.")
     clear_fails(db, key)
     set_session(response, member)
+    if not trusted:
+        s = get_settings()
+        response.set_cookie(DEVICE_COOKIE, create_device_token(member.member_id), max_age=DEVICE_SECONDS,
+                            httponly=True, samesite="lax", secure=s.app_env != "local")
     return member
 
 

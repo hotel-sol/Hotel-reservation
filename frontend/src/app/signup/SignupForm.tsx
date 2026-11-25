@@ -13,9 +13,9 @@ type Key = keyof typeof EMPTY;
 // 서버(SignupRequest)와 같은 규칙. 서버가 다시 검사하므로 여기는 미리 알려 주는 용도
 function check(f: typeof EMPTY): Partial<Record<Key, string>> {
   const e: Partial<Record<Key, string>> = {};
-  if (!/^[A-Za-z0-9_]{4,50}$/.test(f.loginId.trim())) e.loginId = "영문 · 숫자 · _ 4~50자로 적어 주세요.";
+  if (!/^[A-Za-z0-9_]{4,20}$/.test(f.loginId.trim())) e.loginId = "영문 · 숫자 · _ 4~20자로 적어 주세요.";
   if (f.password.length < 8) e.password = "8자 이상 적어 주세요.";
-  else if (f.password.length > 100) e.password = "100자까지 쓸 수 있어요.";
+  else if (f.password.length > 64) e.password = "64자까지 쓸 수 있어요.";
   if (!f.confirm) e.confirm = "비밀번호를 한 번 더 적어 주세요.";
   else if (f.confirm !== f.password) e.confirm = "비밀번호가 서로 달라요.";
   if (!f.name.trim()) e.name = "이름을 적어 주세요.";
@@ -85,7 +85,7 @@ export default function SignupForm() {
   const idError = shown("loginId") ?? (idResult && !idResult.available ? idResult.message : undefined);
   const idHint = idResult?.available
     ? <span className="text-emerald-600">✓ {idResult.message}</span>
-    : "영문 · 숫자 · _ 4~50자. 적은 뒤 중복확인을 눌러 주세요.";
+    : "영문 · 숫자 · _ 4~20자. 적은 뒤 중복확인을 눌러 주세요.";
 
   return (
     <form onSubmit={submit} noValidate className="space-y-4">
@@ -93,7 +93,7 @@ export default function SignupForm() {
 
       <Field id="su-id" label="아이디" hint={idHint} error={idError}>
         <div className="flex gap-2">
-          <input {...fieldProps("su-id", idError)} {...bind("loginId")} autoComplete="username" maxLength={50} />
+          <input {...fieldProps("su-id", idError)} {...bind("loginId")} autoComplete="username" maxLength={20} />
           <button type="button" onClick={checkId} disabled={Boolean(idChecked)} className="btn-outline shrink-0">
             {idChecked ? "확인됨" : "중복확인"}
           </button>
@@ -101,7 +101,7 @@ export default function SignupForm() {
       </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="su-pw" label="비밀번호" hint="8자 이상" error={shown("password")}>
+        <Field id="su-pw" label="비밀번호" hint="8~64자" error={shown("password")}>
           <PasswordInput {...fieldProps("su-pw", shown("password"))} {...bind("password")} autoComplete="new-password" />
         </Field>
         <Field id="su-pw2" label="비밀번호 확인" hint={form.confirm && !errors.confirm ? <span className="text-emerald-600">✓ 같아요</span> : " "} error={shown("confirm")}>
