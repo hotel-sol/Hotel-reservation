@@ -1,6 +1,6 @@
 # Backend — FastAPI + Supabase(PostgreSQL)
 
-- 기준: dev `251bf9c`, 2026-11-25 (Step 3 반영). 이전 판: [docs/archive/2026-11-25_step2/backend/README.md](../docs/archive/2026-11-25_step2/backend/README.md)
+- 기준: dev `ee4a061`, 2026-11-25 (Step 3 · 점검 반영, PR #94까지). 직전 판: [docs/archive/2026-11-25_step3/backend/README.md](../docs/archive/2026-11-25_step3/backend/README.md) · 그 전 판: [docs/archive/2026-11-25_step2/backend/README.md](../docs/archive/2026-11-25_step2/backend/README.md)
 
 ## 처음 한 번 (backend 폴더에서)
 
@@ -11,6 +11,7 @@ uv run python -m app.db.init_db   # 내 스키마(hotel_<이름>)를 지우고 �
 ```
 
 - DB는 **Supabase(PostgreSQL) 팀 프로젝트 하나를 5명이 같이** 씁니다. 비밀번호는 팀 채팅으로만 주고받습니다(저장소 · 노션 금지).
+- `SESSION_SECRET`: 로컬은 아무 값이나 되지만(짧으면 경고), `APP_ENV`가 `local`이 아니면 32자 이상 무작위 값이어야 서버가 켜집니다(#70). 만들기: `python -c "import secrets; print(secrets.token_hex(32))"`
 - `.env`의 `DATABASE_URL`에는 프로젝트 → Connect → **Session pooler** URI를 넣습니다(Direct connection은 IPv6 전용이라 안 될 수 있음).
 - 서로의 데이터를 지우지 않도록 **스키마로 나눕니다.**
 

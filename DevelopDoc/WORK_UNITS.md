@@ -1,6 +1,6 @@
 # WORK_UNITS — 작업 단위 명세
 
-- 기준: dev `251bf9c`, 2026-11-25 (Step 3 반영, PR #88까지 — dev `8a1aa42`). 체크는 **dev에 merge된 코드**로 확인한 것만 했습니다. 이전 판: [docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md](../docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md)
+- 기준: dev `ee4a061`, 2026-11-25 (Step 3 · 점검 반영, PR #94까지). 직전 판: [docs/archive/2026-11-25_step3/DevelopDoc/WORK_UNITS.md](../docs/archive/2026-11-25_step3/DevelopDoc/WORK_UNITS.md). 체크는 **dev에 merge된 코드**로 확인한 것만 했습니다. 이전 판: [docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md](../docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md)
 - 파트 번호는 [PRD 5절](PRD.md#5-화면과-기능-5개-파트)과 같습니다. 진행은 노션 팀 페이지 "Step 2 · Step 3 계획"에서도 갱신합니다.
 - 모든 작업 공통 완료 조건: `uv run pytest` 통과, `npm run build` 통과, dev로 PR.
 
@@ -88,6 +88,7 @@
 - [x] 1-A3 로그인 잠금을 `login_attempt` 테이블에 저장(10분 · 5번), 로그인에 성공한 기기는 따로 셈
 - [x] 보안 #67: 비밀번호 찾기 시연 전까지 끔(403), 탈퇴 아이디 `withdrawn-<번호>`
 - [x] 가입 · 로그인 · 마이페이지 · 비밀번호 찾기 화면 디자인
+- [x] #77 추천 검색 · 객실 상세도 예약과 같은 기간 제한(최대 30박 · 1년 안) (PR #91)
 
 **2 객실 관리** (PR #73 · #81 · #85)
 - [x] 2-A1 등급 테이블 연결(`room.grade_id` · `view_type` · `bed_type`, `GET room-grades`)
@@ -105,11 +106,12 @@
 - [x] 1박 요금 기록 `pricePerNight`, 요금 계산을 `reservation_service` 한 곳으로, 이중 예약 제약 위반(23P01) → 409 `ROOM_NOT_AVAILABLE` (PR #74)
 - [x] #68 회원 한 명의 승인 대기 예약 최대 3건 `TOO_MANY_PENDING` (PR #79)
 
-**5 공통 · 예약 관리** (PR #75 · #78 · #82 · #84 · #88)
+**5 공통 · 예약 관리** (PR #75 · #78 · #82 · #84 · #88 · #94)
 - [x] 4-A4 관리자 취소 때 `canceled_at` · `canceled_by` 기록 (PR #75). 손님 직접 취소는 만들지 않음(팀 결정)
 - [x] 손님 메뉴에 마이페이지 추가 (PR #78)
 - [x] #76 공통: DB 숫자 범위를 넘는 번호는 500 대신 404 (PR #82)
 - [x] 4번 점검 반영: 승인 · 취소 동시 요청은 예약 행 잠금으로 늦은 쪽 409 (PR #84), 체크인이 지난 대기 예약은 승인 불가 · 취소로만 정리 (PR #88)
+- [x] 보안 #70: `health/db`에서 DB 버전 숨김, 약한 `SESSION_SECRET`은 배포 환경에서 서버 시작 거부 (PR #94)
 
 ### 3-B 후보 (해커톤 뒤)
 

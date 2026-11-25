@@ -2,7 +2,7 @@
 
 손님은 날짜와 인원만 넣으면 **예약 가능한 객실을 추천받아 바로 예약**하고, 관리자는 **객실 · 휴무일 · 예약 승인**을 관리하는 호텔 예약 서비스입니다. 3기 바이브코딩 해커톤(11-19 ~ 11-26), 5인 팀.
 
-- 기준: dev `251bf9c`, 2026-11-25 (Step 3 반영). 이전 판: [docs/archive/2026-11-25_step2/ROOT_README.md](docs/archive/2026-11-25_step2/ROOT_README.md)
+- 기준: dev `ee4a061`, 2026-11-25 (Step 3 · 점검 반영, PR #94까지). 직전 판: [docs/archive/2026-11-25_step3/ROOT_README.md](docs/archive/2026-11-25_step3/ROOT_README.md) · 그 전 판: [docs/archive/2026-11-25_step2/ROOT_README.md](docs/archive/2026-11-25_step2/ROOT_README.md)
 
 ## 무엇을 할 수 있나
 
@@ -26,7 +26,7 @@
 | [`DevelopDoc/`](DevelopDoc/) | **개발 문서**: [PRD](DevelopDoc/PRD.md) · [TECH_SPEC](DevelopDoc/TECH_SPEC.md) · [WORK_UNITS](DevelopDoc/WORK_UNITS.md) · [FINAL_CHECKLIST](DevelopDoc/FINAL_CHECKLIST.md) |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 전체 구조 · ERD · 예약 흐름 · 상태 · 휴무 지정 · 로그인 · 화면별 API 현황 (그림) |
 | [`docs/hotel_reservation_ddl.sql`](docs/hotel_reservation_ddl.sql) | 테이블 정의 (기준, 10개) |
-| [`docs/archive/`](docs/archive/) | 과거 자료: 11-19~11-23 설계서 · ERD · 화면 설계 그림, [Step 3 반영 전 문서](docs/archive/2026-11-25_step2/) |
+| [`docs/archive/`](docs/archive/) | 과거 자료: 11-19~11-23 설계서 · ERD · 화면 설계 그림, [Step 3 반영 직후 문서](docs/archive/2026-11-25_step3/README.md) · [Step 3 반영 전 문서](docs/archive/2026-11-25_step2/) |
 | [`frontend/`](frontend/README.md) | Next.js 화면 (:3000). `/api/*`를 백엔드로 넘김 |
 | [`backend/`](backend/README.md) | FastAPI (:8000). DB는 Supabase 팀 프로젝트 하나, 개발은 각자 스키마 `hotel_<이름>` |
 

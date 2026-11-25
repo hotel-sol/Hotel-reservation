@@ -1,6 +1,6 @@
 # 태양의 호텔 — 시스템 구조 한눈에 보기
 
-GitHub에서 그림(Mermaid)으로 보입니다. 기준: **dev `251bf9c`, 2026-11-25 (Step 3 반영)**(Step 1 + Step 2 + Step 3-A, PR #83까지). 이전 판: [archive/2026-11-25_step2/docs/ARCHITECTURE.md](archive/2026-11-25_step2/docs/ARCHITECTURE.md). DB는 Supabase(PostgreSQL) 팀 프로젝트 하나: 각자 개발은 스키마 hotel_<이름>, 테스트는 hotel_<이름>_test, 시연은 공용 스키마 hotel. DB 시간대는 `Asia/Seoul`(11-24부터).
+GitHub에서 그림(Mermaid)으로 보입니다. 기준: **dev `ee4a061`, 2026-11-25 (Step 3 · 점검 반영, PR #94까지)**(Step 1 + Step 2 + Step 3-A, PR #83까지). 이전 판: [archive/2026-11-25_step2/docs/ARCHITECTURE.md](archive/2026-11-25_step2/docs/ARCHITECTURE.md). DB는 Supabase(PostgreSQL) 팀 프로젝트 하나: 각자 개발은 스키마 hotel_<이름>, 테스트는 hotel_<이름>_test, 시연은 공용 스키마 hotel. DB 시간대는 `Asia/Seoul`(11-24부터).
 
 제품 요구사항 · 기술 명세 · 작업 단위는 [`../DevelopDoc/`](../DevelopDoc/)에 있습니다.
 
@@ -237,7 +237,7 @@ sequenceDiagram
 - 실패 횟수는 처음 보는 기기면 아이디 하나로, 로그인에 성공한 적 있는 기기(`hotel_device`)면 그 기기만 따로 셉니다. 남이 일부러 잠가도 주인은 쓰던 기기로 들어올 수 있습니다.
 - 비밀번호 찾기(`POST /api/members/password-reset`)는 시연 전까지 꺼 두어 항상 403입니다.
 
-## 7. 화면 · API 현황 (11-25, dev `251bf9c`)
+## 7. 화면 · API 현황 (11-25, dev `ee4a061`)
 
 | 파트 | 화면 (Next.js) | API (`/api` 생략) | 상태 |
 |---|---|---|---|
