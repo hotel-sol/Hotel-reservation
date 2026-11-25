@@ -81,3 +81,13 @@ tests/                      pytest (conftest.py 의 empty_db / seeded_db 픽스�
 - 같은 방 날짜 겹침은 코드 검사 + DB 제약 `ex_reservation_no_overlap`. 제약 위반(23P01)은 409 `ROOM_NOT_AVAILABLE`.
 - DB 숫자 범위를 넘는 번호(DataError 22003)는 `main.py`에서 404 로 바꿉니다.
 - DB 파일(DDL · 시드 · `tests/conftest.py` · `tests/helpers.py`)은 DB 담당이 고치고, 테스트는 `tests/helpers.py`로만 행을 넣습니다(팀 규칙, Discussion #60).
+
+## 배포 (시연용, 무료)
+| 구분 | 주소 | 서비스 |
+|---|---|---|
+| 화면 | https://hotel-reservation-ten-phi.vercel.app | Vercel (root `frontend`, env `BACKEND_URL`) |
+| 서버 | https://hotel-sol-api.onrender.com | Render (root `backend`, env `APP_ENV=production` · `DB_SCHEMA=hotel` · `DATABASE_URL` · `SESSION_SECRET`) |
+
+- `main`에 합쳐지면 둘 다 자동으로 다시 배포된다(Render는 `backend/` 안이 바뀔 때만).
+- Render 무료 서버는 15분 쉬면 잠든다. 시연 전에 `/api/health`를 한 번 열어 깨운다(첫 응답 50초 안팎).
+- DB 구조를 바꿀 때: Render 일시정지 → 공용 `hotel` 변경 → `main` 반영 → Render 재개 · 배포 → 점검.
