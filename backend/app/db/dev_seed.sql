@@ -29,4 +29,5 @@ INSERT INTO menu (parent_id, menu_name, menu_url, role, sort_order) VALUES
   (NULL, '예약 일자 관리', '/admin/closed-dates', 'ADMIN', 2),
   (NULL, '예약 관리', '/admin/reservations', 'ADMIN', 3),
   (NULL, '객실 추천', '/rooms', 'USER', 1),
-  (NULL, '내 예약', '/reservation/list', 'USER', 2);
+  (NULL, '내 예약', '/reservation/list', 'USER', 2),
+  (NULL, '마이페이지', '/mypage', 'USER', 3);  -- 1번 요청(11-25): 헤더에 마이페이지 링크

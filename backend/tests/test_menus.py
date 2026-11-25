@@ -13,7 +13,7 @@ SEED_PASSWORD = "not-a-real-hash"
 COOKIE = get_settings().session_cookie
 ADMIN = {"Cookie": f"{COOKIE}={create_session_token(1, SEED_PASSWORD)}"}
 GUEST = {"Cookie": f"{COOKIE}={create_session_token(2, SEED_PASSWORD)}"}
-USER_MENUS = [("객실 추천", "/rooms"), ("내 예약", "/reservation/list")]
+USER_MENUS = [("객실 추천", "/rooms"), ("내 예약", "/reservation/list"), ("마이페이지", "/mypage")]
 ADMIN_MENUS = [
     ("객실 관리", "/admin/rooms"),
     ("예약 일자 관리", "/admin/closed-dates"),

@@ -176,7 +176,7 @@ def test_admin_cannot_withdraw_and_create_admin(client):
 
 def test_menus_follow_role(client, seeded_db):
     names = lambda: [m["menuName"] for m in client.get("/api/menus").json()]  # noqa: E731
-    assert names() == ["객실 추천", "내 예약"]  # 로그인 안 함 = 손님 메뉴
+    assert names() == ["객실 추천", "내 예약", "마이페이지"]  # 로그인 안 함 = 손님 메뉴
     create_admin.create_admin("boss01", "관리자", "adminpass1")
     login(client, "boss01", "adminpass1")
     assert {"객실 관리", "예약 일자 관리", "예약 관리"} <= set(names())
