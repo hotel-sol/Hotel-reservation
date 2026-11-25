@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import StatusBadge from "@/components/StatusBadge";
 import { ApiError } from "@/lib/api/client";
 import { reservationsApi } from "@/lib/api/reservations";
-import { won } from "@/lib/format";
+import PriceDetail from "../../PriceDetail";
 import type { Reservation } from "@/types/api";
 
 export default function ReservationComplete() {
@@ -34,7 +34,7 @@ export default function ReservationComplete() {
         <dt className="text-slate-500">객실</dt><dd>{r.roomName}</dd>
         <dt className="text-slate-500">일정</dt><dd>{r.checkInDate} ~ {r.checkOutDate}</dd>
         <dt className="text-slate-500">인원</dt><dd>{r.guestCount}명</dd>
-        <dt className="text-slate-500">금액</dt><dd className="font-semibold">{won(r.totalPrice)}</dd>
+        <dt className="text-slate-500">금액</dt><dd><PriceDetail r={r} /></dd>
         <dt className="text-slate-500">상태</dt><dd><StatusBadge status={r.status} /></dd>
       </dl>
       <div className="flex gap-2 pt-2">

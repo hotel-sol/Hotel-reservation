@@ -98,6 +98,7 @@ export interface Reservation {
   checkOutDate: string;
   guestCount: number;
   totalPrice: number;
+  pricePerNight: number | null; // 예약 때의 1박 요금 (4-A3). 옛 예약은 null 일 수 있음 → 총액만 표시
   status: ReservationStatus;
   requestMemo: string | null;
   createdAt: string;

@@ -15,7 +15,7 @@ from app.schemas.room import RecommendRoomOut, RoomOut, RoomSort
 from app.services.room_service import recommend_rooms
 from app.schemas.reservation import AvailableDatesOut, QuoteOut
 from app.services.availability_service import month_range, room_calendar
-from app.services.reservation_service import check_stay, get_bookable_room, total_price
+from app.services.reservation_service import check_stay, get_bookable_room, night_price, total_price
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -106,6 +106,6 @@ def quote(
         check_out=check_out,
         guests=guests,
         nights=nights,
-        price_per_night=room.price,
+        price_per_night=night_price(room),
         total_price=total_price(room, nights),
     )

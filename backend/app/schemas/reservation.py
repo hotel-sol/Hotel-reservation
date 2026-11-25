@@ -29,6 +29,7 @@ class ReservationOut(CamelModel):
     check_out_date: date
     guest_count: int
     total_price: int
+    price_per_night: int | None = None  # 4-A3. 비어 있는 옛 예약이 있을 수 있음(#60 R5)
     status: str
     request_memo: str | None
     created_at: datetime
