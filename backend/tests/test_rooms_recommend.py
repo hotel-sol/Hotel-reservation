@@ -7,6 +7,7 @@ from sqlalchemy import text
 from app.core.dates import today_kst
 from app.db.session import engine
 from app.services import room_service
+from tests import helpers
 
 pytestmark = pytest.mark.usefixtures("empty_db")
 
@@ -36,10 +37,8 @@ def room(name, views=0, price=100000, max_guest=2, active="Y", created=OLD):
 
 
 def book(room_id, check_in=FUTURE, nights=1, status="APPROVED", created=None):
-    run("INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date, guest_count, total_price,"
-        " status, created_at) VALUES (1, :room, :cin, :cout, 1, 1, :status, :created)",
-        room=room_id, cin=check_in, cout=check_in + timedelta(days=nights), status=status,
-        created=created or datetime.now())
+    helpers.add_reservation(room_id, check_in, nights, status, member_id=1, price_per_night=1,
+                            total_price=1, created_at=created)
 
 
 def get(client, **query):
@@ -196,10 +195,9 @@ def test_canceled_booking_does_not_block(client):
 def test_room_and_hotel_closed_dates_hide_rooms(client):
     a = room("A")
     room("B")
-    run("INSERT INTO closed_date (room_id, closed_date, reason) VALUES (:room, :day, '점검')", room=a, day=FUTURE)
+    helpers.add_closed_date(FUTURE, a, "점검")
     assert names(get(client, **stay(FUTURE, 2))) == ["B"]
-    run("INSERT INTO closed_date (room_id, closed_date, reason) VALUES (NULL, :day, '전체 휴무')",
-        day=FUTURE + timedelta(days=1))
+    helpers.add_closed_date(FUTURE + timedelta(days=1), None, "전체 휴무")
     assert get(client, **stay(FUTURE, 2))["total"] == 0
     # 휴무일이 체크아웃 날이면 묵지 않으므로 괜찮다
     assert sorted(names(get(client, **stay(FUTURE - timedelta(days=1), 1)))) == ["A", "B"]

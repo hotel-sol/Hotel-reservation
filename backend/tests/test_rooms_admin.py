@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.dates import today_kst
 from app.core.security import create_session_token
 from app.db.session import engine
+from tests import helpers
 
 pytestmark = pytest.mark.usefixtures("seeded_db")
 
@@ -32,15 +33,11 @@ def run(sql, **params):
 
 
 def reserve(room_id, check_in, nights=1, status="APPROVED"):
-    run(
-        "INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date, guest_count, total_price, status)"
-        " VALUES (2, :room, :cin, :cout, 1, 80000, :status)",
-        room=room_id, cin=check_in, cout=check_in + timedelta(days=nights), status=status,
-    )
+    helpers.add_reservation(room_id, check_in, nights, status, total_price=80000)
 
 
 def close(day, room_id=None):
-    run("INSERT INTO closed_date (room_id, closed_date, reason) VALUES (:room, :day, '점검')", room=room_id, day=day)
+    helpers.add_closed_date(day, room_id, "점검")
 
 
 def room1(**change):
