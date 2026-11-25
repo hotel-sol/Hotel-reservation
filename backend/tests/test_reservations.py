@@ -20,9 +20,16 @@ SEED_PASSWORD = "not-a-real-hash"
 COOKIE = get_settings().session_cookie
 GUEST = {"Cookie": f"{COOKIE}={create_session_token(2, SEED_PASSWORD)}"}
 API = "/api/reservations"
-TODAY = today_kst()
-# 시드(2026-12 예약)와 겹치지 않고, 예약 가능 범위(오늘부터 365일, reservation_service.BOOKING_WINDOW_DAYS) 안인 미래 날짜
-D1 = max(TODAY + timedelta(days=30), date(2027, 1, 4))
+REAL_TODAY = today_kst()
+# 시드(2026-12 예약)와 겹치지 않는 미래 날짜
+D1 = max(REAL_TODAY + timedelta(days=30), date(2027, 1, 4))
+# 예약 확인(reservation_service)이 보는 '오늘'. 예약 가능 범위(오늘부터 30일) 안에 D1 이 들어오게 D1 사흘 전으로 고정한다.
+TODAY = D1 - timedelta(days=3)
+
+
+@pytest.fixture(autouse=True)
+def fixed_today(monkeypatch):
+    monkeypatch.setattr("app.services.reservation_service.today_kst", lambda: TODAY)
 
 
 def sql(statement, **params):
@@ -72,7 +79,7 @@ def test_overlap_is_room_not_available(client):
 
     assert reserve(client, D1 - timedelta(days=1), nights=1).status_code == 201  # 체크인 날에 체크아웃
     assert reserve(client, D1 + timedelta(days=2)).status_code == 201  # 체크아웃 날에 체크인
-    # 다른 방은 가능 (guest1 은 시드 대기 1건 + 위 2건으로 대기 상한 3건이라 1번 회원으로 확인, #68)
+    # 다른 방은 가능 (guest1 은 위 2건 등으로 대기 상한(#68)에 가까워서 1번 회원으로 확인)
     assert reserve(client, D1, room_id=2, headers=ADMIN).status_code == 201
 
 
@@ -177,7 +184,8 @@ def calendar(client, day, room_id=1):
 
 @pytest.mark.parametrize("approve_first", [False, True], ids=["pending", "approved"])
 def test_canceled_reservation_reopens_calendar(client, approve_first):
-    day = D1.replace(day=10)  # 같은 달 안에서 10 · 11일 숙박, 12일 체크아웃
+    # 2박(체크아웃 포함 사흘)이 한 달 달력 안에 들어오는 날. 넘치면 다음 달 1일 (그래도 예약 가능 범위 안)
+    day = D1 if (D1 + timedelta(days=2)).month == D1.month else (D1 + timedelta(days=5)).replace(day=1)
     r = reserve(client, day, nights=2)
     assert r.status_code == 201, r.text
     rid = r.json()["reservationId"]
@@ -197,7 +205,7 @@ def test_canceled_reservation_reopens_calendar(client, approve_first):
 
 def test_seed_canceled_reservation_is_open(client):
     """시드: 102호 2026-12-20~21 예약은 CANCELED 라서 20일이 열려 있어야 한다."""
-    if TODAY > date(2026, 12, 20):
+    if REAL_TODAY > date(2026, 12, 20):
         pytest.skip("시드 날짜가 이미 지남")
     cal = calendar(client, date(2026, 12, 20), room_id=2)
     assert cal["2026-12-20"] is None
@@ -209,7 +217,7 @@ from app.services.reservation_service import BOOKING_WINDOW_DAYS, MAX_NIGHTS  # 
 
 
 def test_max_nights(client):
-    assert quote(client, D1, nights=MAX_NIGHTS).status_code == 200  # 30박은 가능
+    assert quote(client, D1, nights=MAX_NIGHTS).status_code == 200  # 최대 박수(6박)는 가능
     r = quote(client, D1, nights=MAX_NIGHTS + 1)
     assert r.status_code == 400 and code(r) == "TOO_LONG_STAY"
     assert code(reserve(client, D1, nights=MAX_NIGHTS + 1)) == "TOO_LONG_STAY"
@@ -220,7 +228,7 @@ def test_max_nights(client):
 
 def test_booking_window(client):
     last = TODAY + timedelta(days=BOOKING_WINDOW_DAYS)
-    assert quote(client, last, nights=1).status_code == 200  # 365일째 체크인은 가능
+    assert quote(client, last, nights=1).status_code == 200  # 30일째 체크인은 가능
     r = quote(client, last + timedelta(days=1), nights=1)
     assert r.status_code == 400 and code(r) == "TOO_FAR_DATE"
     assert code(reserve(client, last + timedelta(days=1), nights=1)) == "TOO_FAR_DATE"

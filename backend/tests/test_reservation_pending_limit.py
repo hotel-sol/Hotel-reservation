@@ -19,8 +19,14 @@ SEED_PASSWORD = "not-a-real-hash"
 COOKIE = get_settings().session_cookie
 MEMBER1 = {"Cookie": f"{COOKIE}={create_session_token(1, SEED_PASSWORD)}"}
 ADMIN = MEMBER1  # 시드 1번은 ADMIN 이라 관리자 취소에도 쓴다
-TODAY = today_kst()
-D1 = max(TODAY + timedelta(days=30), date(2027, 1, 4))  # 시드(2026-12)와 겹치지 않고 예약 가능 범위 안
+D1 = max(today_kst() + timedelta(days=30), date(2027, 1, 4))  # 시드(2026-12)와 겹치지 않는 미래 날짜
+# 예약 확인이 보는 '오늘'. 예약 가능 범위(오늘부터 30일) 안에 D1 ~ D1+25 가 들어오게 D1 사흘 전으로 고정한다.
+TODAY = D1 - timedelta(days=3)
+
+
+@pytest.fixture(autouse=True)
+def fixed_today(monkeypatch):
+    monkeypatch.setattr("app.services.reservation_service.today_kst", lambda: TODAY)
 
 
 def reserve(client, check_in, room_id=1, nights=2, headers=MEMBER1):
@@ -68,11 +74,9 @@ def test_only_live_future_pending_counts(client):
     fill_to_limit(client)  # 1번 회원은 여전히 상한만큼 만들 수 있음
 
 
-def test_seed_guest_already_has_one_pending(client):
-    """시드 2번(guest1)은 대기 예약 1건(2026-12-24)이 있어서 상한 - 1 건만 더 만들 수 있다."""
-    if TODAY >= date(2026, 12, 26):
-        pytest.skip("시드 대기 예약이 이미 끝남")
-    guest = {"Cookie": f"{COOKIE}={create_session_token(2, SEED_PASSWORD)}"}
+def test_existing_pending_counts(client):
+    """이미 있는 대기 예약도 센다: 1건이 있으면 상한 - 1 건만 더 만들 수 있다. (시드 날짜에 기대지 않게 직접 넣음)"""
+    helpers.add_reservation(2, D1 + timedelta(days=15), status="PENDING", member_id=1)
     for i in range(MAX_PENDING_PER_MEMBER - 1):
-        assert reserve(client, D1 + timedelta(days=3 * i), headers=guest).status_code == 201
-    assert reserve(client, D1 + timedelta(days=20), headers=guest).json()["detail"]["code"] == "TOO_MANY_PENDING"
+        assert reserve(client, D1 + timedelta(days=3 * i)).status_code == 201
+    assert reserve(client, D1 + timedelta(days=20)).json()["detail"]["code"] == "TOO_MANY_PENDING"

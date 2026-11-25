@@ -113,7 +113,7 @@ Hotel-reservation/
 | `ROOM_NOT_AVAILABLE` | 409 | 예약 기간에 다른 예약(대기 · 승인)이 있음. DB 이중 예약 제약 위반(23P01)도 이 코드 |
 | `TOO_MANY_PENDING` | 409 | 그 회원의 승인 대기 예약(체크아웃 전)이 이미 3건 |
 | `PAST_DATE` · `INVALID_DATES` | 400 | 지난 체크인 날짜 · 체크아웃이 체크인보다 빠르거나 같음 |
-| `TOO_LONG_STAY` · `TOO_FAR_DATE` | 400 | 30박 초과 · 체크인이 오늘부터 365일 뒤 (예약 · 견적 · 추천 검색 공통) |
+| `TOO_LONG_STAY` · `TOO_FAR_DATE` | 400 | 6박 초과 · 체크인이 오늘부터 30일 뒤 (예약 · 견적 · 추천 검색 공통) |
 | `TOO_MANY_GUESTS` | 400 | 인원이 객실 최대 인원보다 많음 |
 | `ALREADY_CLOSED` | 409 | 이미 휴무(호텔 전체 휴무일에 객실 휴무를 넣는 경우 포함) |
 | `CLOSED_DATE_CONFLICT` | 409 | 휴무로 지정하려는 날에 묵는 예약이 있음. 기간 지정이면 `detail.blockedDates`에 막힌 날짜 전부 |
