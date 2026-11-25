@@ -133,7 +133,7 @@ def test_list_and_delete(admin):
 
 def test_guest_and_anonymous_blocked(client, seeded_db):
     assert upload(client).status_code == 401
-    r = client.post("/api/members/signup", json={"loginId": "guest_up", "password": "guest1234", "name": "손님"})
+    r = client.post("/api/members/signup", json={"loginId": "guest_up", "password": "guest1234", "name": "손님", "phone": "010-1234-5678"})
     assert r.status_code in (200, 201), r.text
     client.post("/api/members/login", json={"loginId": "guest_up", "password": "guest1234"})
     assert upload(client).status_code == 403

@@ -35,13 +35,14 @@ export default function LoginForm() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      const me = await membersApi.login(loginId, password);
+      await membersApi.login(loginId, password);
       setPassword(""); // 이전 화면 상태 유지(Activity) 대비
       // 오픈 리다이렉트 방지: 브라우저와 같은 방식으로 주소를 풀어서 우리 사이트일 때만 허용.
       // 글자 검사(startsWith("/"))는 "/\evil.com" · "/<탭>/evil.com" 같은 외부 주소를 통과시킨다
       const safeNext = internalUrl(next);
       // 페이지 전체를 새로 읽는다(router.push 아님): 숨겨 둔 화면(Activity)에 로그인 전 상태가 남지 않게
-      window.location.assign(safeNext ?? (me.role === "ADMIN" ? "/admin/reservations" : "/rooms"));
+      // 관리자도 고객 화면부터 보여 준다(머리말의 "관리자 페이지" 버튼으로 이동)
+      window.location.assign(safeNext ?? "/rooms");
     } catch (err) {
       setError((err as ApiError).message);
     }
