@@ -53,6 +53,9 @@ export default function RoomManager() {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [photoRoom, setPhotoRoom] = useState<Room | null>(null); // 사진 관리 중인 객실
   const [error, setError] = useState("");
+  const [listError, setListError] = useState(""); // 목록의 비활성화 · 활성화 버튼 실패 안내 (#76-5)
+  const [saving, setSaving] = useState(false); // 저장 중 버튼 잠금 — 두 번 눌러 같은 객실이 두 번 저장되지 않게 (#76-4)
+  const [togglingId, setTogglingId] = useState<number | null>(null);
   const [grades, setGrades] = useState<RoomGrade[]>([]);
 
   // 등급 4개: 한 번만 불러온다
@@ -87,7 +90,7 @@ export default function RoomManager() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!editing) return;
+    if (!editing || saving) return;
     setError("");
     if (nameChanged && !ROOM_NO.test(editing.roomNo)) {
       setError("객실명은 숫자 3~4자리로 적어 주세요. (예: 703 → 0703호)");
@@ -98,6 +101,7 @@ export default function RoomManager() {
       roomName: nameChanged ? toRoomName(editing.roomNo) : editing.form.roomName,
       bedType: editing.form.bedType?.trim() || null,
     };
+    setSaving(true);
     try {
       if (editing.id) await adminApi.updateRoom(editing.id, body);
       else setPhotoRoom(await adminApi.createRoom(body)); // 새 객실은 바로 사진을 올릴 수 있게 사진 창을 연다
@@ -105,14 +109,26 @@ export default function RoomManager() {
       load();
     } catch (err) {
       setError((err as ApiError).message);
+    } finally {
+      setSaving(false);
     }
   }
 
   async function toggle(room: Room) {
+    if (togglingId !== null) return;
     const next = room.isActive === "Y" ? "N" : "Y";
     if (next === "N" && !confirm(`${room.roomName} 객실을 비활성화할까요?`)) return;
-    await adminApi.setRoomActive(room.roomId, next);
-    load();
+    setListError("");
+    setTogglingId(room.roomId);
+    try {
+      await adminApi.setRoomActive(room.roomId, next);
+      load();
+    } catch (err) {
+      // 예: 앞으로 묵을 예약이 있으면 서버가 409 + "예약을 먼저 취소해 주세요" (#76-3)
+      setListError(`${room.roomName}: ${(err as ApiError).message}`);
+    } finally {
+      setTogglingId(null);
+    }
   }
 
   const f = editing?.form;
@@ -306,13 +322,20 @@ export default function RoomManager() {
             <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p>
           )}
           <div className="flex gap-2 sm:col-span-2">
-            <button className="btn-primary">{editing.id ? "수정" : "등록"}</button>
+            <button className="btn-primary" disabled={saving}>{saving ? "저장 중…" : editing.id ? "수정" : "등록"}</button>
             <button type="button" className="btn-outline" onClick={() => { setEditing(null); setError(""); }}>취소</button>
           </div>
         </form>
       )}
 
       {photoRoom && <RoomPhotos key={photoRoom.roomId} room={photoRoom} onClose={() => setPhotoRoom(null)} />}
+
+      {listError && (
+        <p role="alert" className="flex items-start gap-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          <span className="flex-1">{listError}</span>
+          <button type="button" className="text-red-500" aria-label="안내 닫기" onClick={() => setListError("")}>✕</button>
+        </p>
+      )}
 
       <table className="w-full overflow-hidden rounded-xl bg-white text-sm shadow-sm">
         <thead className="bg-slate-100 text-left text-slate-600">
@@ -332,7 +355,7 @@ export default function RoomManager() {
               <td className="space-x-1 pr-3 text-right">
                 <button className="btn-outline px-2 py-1" onClick={() => startEdit(r)}>수정</button>
                 <button className="btn-outline px-2 py-1" onClick={() => setPhotoRoom(r)}>사진</button>
-                <button className="btn-outline px-2 py-1" onClick={() => toggle(r)}>{r.isActive === "Y" ? "비활성화" : "활성화"}</button>
+                <button className="btn-outline px-2 py-1" disabled={togglingId === r.roomId} onClick={() => toggle(r)}>{r.isActive === "Y" ? "비활성화" : "활성화"}</button>
               </td>
             </tr>
           ))}
