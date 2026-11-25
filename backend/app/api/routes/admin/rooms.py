@@ -114,7 +114,9 @@ def create_room(body: RoomCreate, db: DB):
 
 @router.put("/{room_id}", response_model=RoomOut)
 def update_room(room_id: int, body: RoomUpdate, db: DB):
-    room = db.get(Room, room_id) or fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
+    # 객실 행을 잠그고 확인 (준엽님 점검): 예약 확인과 요금 저장 사이에 손님 예약이 끼어들면
+    # 예약은 옛 요금 · 객실은 새 요금이 될 수 있다. 예약도 객실 행을 잠그므로(#79) 한쪽이 끝날 때까지 기다린다
+    room = db.get(Room, room_id, with_for_update=True) or fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
     ensure_unique_name(db, body.room_name, exclude_id=room_id)
     values = room_values(db, body)
     # 2A: 앞으로 묵을 예약이 있으면 종류(등급) · 인원 · 요금은 못 바꾼다 (이미 받은 예약과 어긋나지 않게).

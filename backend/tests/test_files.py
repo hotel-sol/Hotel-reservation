@@ -273,3 +273,13 @@ def test_room_not_locked_while_saving_file(admin, monkeypatch):
     monkeypatch.setattr(photo_storage, "save", save_and_try_lock)
     assert upload(admin).status_code == 201
     assert seen == ["잠글 수 있음"]
+
+
+def test_upload_does_not_block_server():
+    """준엽님 점검: 업로드는 async 가 아닌 일반 함수 → FastAPI 가 스레드에서 돌려서, Storage 를 기다리는 동안
+    다른 요청(예약 · 로그인)이 멈추지 않는다. async def 안에서 DB · HTTP 를 그냥 기다리면 서버 전체가 멈춘다."""
+    import inspect
+
+    from app.api.routes import files
+
+    assert not inspect.iscoroutinefunction(files.upload_file)

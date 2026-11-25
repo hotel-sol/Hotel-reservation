@@ -276,3 +276,28 @@ def test_same_name_saved_twice_at_once_is_409(client, monkeypatch):
     assert r.status_code == 409, r.text
     assert r.json()["detail"]["code"] == "DUPLICATE_ROOM_NAME"
     assert len(calls) == 2  # 저장 실패 뒤 다시 확인해서 409
+
+
+# ---------- 준엽님 점검 (Discord, 11-25) ----------
+
+def test_update_locks_room_while_checking_reservations(client, monkeypatch):
+    """객실 수정은 예약 확인 전에 객실 행을 잠근다 → 확인과 저장 사이에 손님 예약(객실 행 잠금)이 끼어들지 못한다."""
+    from sqlalchemy.exc import OperationalError
+
+    from app.api.routes.admin import rooms
+
+    real = rooms.future_reservation_count
+    seen = []
+
+    def count_and_try_lock(db, room_id):
+        try:
+            with engine.begin() as c:  # 다른 요청(예약)인 척: 그 방을 바로 잠글 수 있나
+                c.execute(text("SELECT room_id FROM room WHERE room_id = :id FOR UPDATE NOWAIT"), {"id": room_id})
+            seen.append("잠글 수 있음")
+        except OperationalError:
+            seen.append("이미 잠겨 있음")
+        return real(db, room_id)
+
+    monkeypatch.setattr(rooms, "future_reservation_count", count_and_try_lock)
+    assert put(client, room1(price=90000)).status_code == 200
+    assert seen == ["이미 잠겨 있음"]
