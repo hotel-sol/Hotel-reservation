@@ -231,3 +231,30 @@ def test_calendar_rejects_bad_year(client):
         r = client.get(f"/api/rooms/1/available-dates?month={month}")
         assert r.status_code == 400 and code(r) == "INVALID_MONTH", month
     assert client.get("/api/rooms/1/available-dates?month=2026-13").status_code == 400
+
+
+# ---- 이중 예약 DB 제약 위반(23P01) → 409 ROOM_NOT_AVAILABLE (#60 4번-②) ----
+# 제약은 ③단계에서 DB 담당이 건다. 지금은 commit 이 PostgreSQL 과 같은 오류를 내게 해서 바꾸는 코드만 확인한다.
+
+import psycopg  # noqa: E402
+from sqlalchemy.exc import IntegrityError  # noqa: E402
+from sqlalchemy.orm import Session  # noqa: E402
+
+
+def fail_commit_with(monkeypatch, pg_error):
+    def commit(self):
+        raise IntegrityError("INSERT INTO reservation ...", {}, pg_error)
+    monkeypatch.setattr(Session, "commit", commit)
+
+
+def test_overlap_constraint_violation_is_room_not_available(client, monkeypatch):
+    fail_commit_with(monkeypatch, psycopg.errors.ExclusionViolation())  # SQLSTATE 23P01
+    r = reserve(client, D1)
+    assert r.status_code == 409 and code(r) == "ROOM_NOT_AVAILABLE"
+    assert r.json()["detail"]["message"] == "선택한 날짜에 이미 예약이 있습니다."
+
+
+def test_other_integrity_errors_are_not_hidden(client, monkeypatch):
+    fail_commit_with(monkeypatch, psycopg.errors.CheckViolation())  # 23514: 겹침이 아니면 그대로 오류
+    with pytest.raises(IntegrityError):
+        reserve(client, D1)

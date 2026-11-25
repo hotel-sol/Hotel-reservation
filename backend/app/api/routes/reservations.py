@@ -1,5 +1,6 @@
 """객실 예약 (손님) — RSV-001 예약하기, RSV-002 예약 완료"""
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from fastapi import APIRouter
 
@@ -18,6 +19,17 @@ BLOCK_ERRORS = {
     "ROOM_CLOSED": (409, "ROOM_CLOSED", "이 객실은 선택한 기간에 판매하지 않습니다."),
     "BOOKED": (409, "ROOM_NOT_AVAILABLE", "선택한 날짜에 이미 예약이 있습니다."),
 }
+
+
+EXCLUSION_VIOLATION = "23P01"  # PostgreSQL: EXCLUDE 제약 위반
+
+
+def is_overlap_violation(e: IntegrityError) -> bool:
+    """이중 예약 제약(ex_reservation_no_overlap, #57 4-A1 · #60 ③단계) 위반인지.
+
+    reservation 에 걸리는 EXCLUDE 제약은 이것 하나뿐이라 SQLSTATE 만 본다.
+    """
+    return getattr(e.orig, "sqlstate", None) == EXCLUSION_VIOLATION
 
 
 def to_out(r: Reservation, room_name: str | None = None) -> ReservationOut:
@@ -46,7 +58,13 @@ def create_reservation(body: ReservationCreate, member: CurrentMember, db: DB):
         request_memo=body.request_memo,
     )
     db.add(reservation)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        if is_overlap_violation(e):  # 위 확인을 지나친 겹침도 DB 제약(③단계)이 막는다
+            fail(*BLOCK_ERRORS["BOOKED"])
+        raise
     db.refresh(reservation)
     return to_out(reservation, room.room_name)
 

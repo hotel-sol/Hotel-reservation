@@ -42,5 +42,10 @@ def check_stay(room: Room, check_in: date, check_out: date, guests: int) -> int:
 
 
 def total_price(room: Room, nights: int) -> int:
-    """총액 = 1박 요금 × 박수"""
+    """총액 = 1박 요금 × 박수
+
+    요금 계산은 여기 한 곳에만 둔다 (#60 문제 ④). 예약 저장 · 견적(quote)이 이 함수를 같이 쓴다.
+    등급 · 전망 · 성수기 · 회원가 같은 규칙이 생기면 이 함수 안에서 순서 · 반올림을 정하고,
+    다른 파일에서 room.price × 박수를 직접 계산하지 않는다.
+    """
     return room.price * nights
