@@ -122,7 +122,7 @@ Hotel-reservation/
 | `FUTURE_RESERVATION_EXISTS` | 409 | 앞으로 묵을 예약이 있는 객실의 종류 · 인원 · 요금 수정, 또는 비활성화 |
 | `INVALID_FILE_TYPE` · `FILE_TOO_LARGE` · `TOO_MANY_FILES` | 400 · 400 · 409 | 사진이 jpg · png가 아님 · 5MB 초과 · 객실당 5장 초과 |
 | `STORAGE_FAILED` | 502 | Supabase Storage에 사진을 올리지 못함 |
-| `INVALID_STATUS` · `PAST_CHECK_IN` | 409 | 바꿀 수 없는 예약 상태 · 체크인이 지난 예약 취소 |
+| `INVALID_STATUS` · `PAST_CHECK_IN` | 409 | 바꿀 수 없는 예약 상태 · 체크인이 지난 승인 예약 취소 / 지난 대기 예약 승인 |
 | `TOO_MANY_ATTEMPTS` | 429 | 비밀번호를 10분 안에 5번 틀림 |
 | `PASSWORD_RESET_DISABLED` | 403 | 비밀번호 찾기(꺼 둠) |
 | `NOT_FOUND` | 404 | DB 숫자 범위를 넘는 번호 등 |
@@ -133,7 +133,7 @@ Hotel-reservation/
 
 | 무엇 | 명령 | 기준 |
 |---|---|---|
-| 백엔드 테스트 | `backend`에서 `uv run pytest` | 전부 통과 (11-25 dev `251bf9c` 기준 190개) |
+| 백엔드 테스트 | `backend`에서 `uv run pytest` | 전부 통과 (11-25 dev `8a1aa42` 기준 195개) |
 | 화면 타입 · 규칙 | `frontend`에서 `npx tsc --noEmit`, `npm run lint` | 오류 0 |
 | 화면 빌드 | `frontend`에서 `npm run build` | 통과 (Next 16 `cacheComponents`: `useSearchParams` 등은 Suspense 안) |
 

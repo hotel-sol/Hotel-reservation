@@ -28,7 +28,7 @@
 
 ## 3. 품질
 
-- [x] `backend`: `uv run pytest` 전부 통과 (11-25, dev `251bf9c`, 190개. 11-24에는 77개)
+- [x] `backend`: `uv run pytest` 전부 통과 (11-25, dev `8a1aa42`, 195개. 11-24에는 77개)
 - [x] `frontend`: `npx tsc --noEmit` · `npm run lint` 오류 0 (11-24)
 - [ ] `frontend`: `npm run build` 통과 — **main PR 직전 다시 확인**
 - [ ] 브라우저 콘솔 · 서버 로그에 오류 없음 (시연 시나리오 한 바퀴)

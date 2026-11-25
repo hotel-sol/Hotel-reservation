@@ -1,6 +1,6 @@
 # WORK_UNITS — 작업 단위 명세
 
-- 기준: dev `251bf9c`, 2026-11-25 (Step 3 반영, PR #83까지). 체크는 **dev에 merge된 코드**로 확인한 것만 했습니다. 이전 판: [docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md](../docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md)
+- 기준: dev `251bf9c`, 2026-11-25 (Step 3 반영, PR #88까지 — dev `8a1aa42`). 체크는 **dev에 merge된 코드**로 확인한 것만 했습니다. 이전 판: [docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md](../docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md)
 - 파트 번호는 [PRD 5절](PRD.md#5-화면과-기능-5개-파트)과 같습니다. 진행은 노션 팀 페이지 "Step 2 · Step 3 계획"에서도 갱신합니다.
 - 모든 작업 공통 완료 조건: `uv run pytest` 통과, `npm run build` 통과, dev로 PR.
 
@@ -89,11 +89,12 @@
 - [x] 보안 #67: 비밀번호 찾기 시연 전까지 끔(403), 탈퇴 아이디 `withdrawn-<번호>`
 - [x] 가입 · 로그인 · 마이페이지 · 비밀번호 찾기 화면 디자인
 
-**2 객실 관리** (PR #73 · #81)
+**2 객실 관리** (PR #73 · #81 · #85)
 - [x] 2-A1 등급 테이블 연결(`room.grade_id` · `view_type` · `bed_type`, `GET room-grades`)
 - [x] 2-A2 사진 공용 저장소: `SUPABASE_URL` · `SUPABASE_SECRET_KEY`가 있으면 Storage 버킷 `room-photos`, 없으면 `backend/uploads/`
 - [x] #69 입력 상한(요금 ≤ 10,000,000 · 인원 ≤ 20) · 사진 5장 동시 업로드 경합(객실 행 잠금)
 - [x] #76 앞으로 묵을 예약이 있는 객실 비활성화 409, 공백 이름 · 동시 저장 500 · 버튼 실패 안내
+- [x] 4번 점검 반영: 객실 수정 때 객실 행 잠금(요금 수정 ↔ 예약 동시), 사진 업로드를 일반 함수로(업로드 중 서버 멈춤 방지), 수정 화면은 전망만 바꿔도 요금 자동 변경 안 함 (PR #85)
 
 **3 예약 일자** (PR #71)
 - [x] 3-A1~A3 휴무 묶음 `closure`(한 번 지정 = 1개, 사유 분류 · 상세 · 지정자), `GET admin/closures` · `DELETE admin/closures/{id}`, 화면에 묶음 목록(예정 · 진행 중 · 종료)
@@ -104,10 +105,11 @@
 - [x] 1박 요금 기록 `pricePerNight`, 요금 계산을 `reservation_service` 한 곳으로, 이중 예약 제약 위반(23P01) → 409 `ROOM_NOT_AVAILABLE` (PR #74)
 - [x] #68 회원 한 명의 승인 대기 예약 최대 3건 `TOO_MANY_PENDING` (PR #79)
 
-**5 공통 · 예약 관리** (PR #75 · #78 · #82)
+**5 공통 · 예약 관리** (PR #75 · #78 · #82 · #84 · #88)
 - [x] 4-A4 관리자 취소 때 `canceled_at` · `canceled_by` 기록 (PR #75). 손님 직접 취소는 만들지 않음(팀 결정)
 - [x] 손님 메뉴에 마이페이지 추가 (PR #78)
 - [x] #76 공통: DB 숫자 범위를 넘는 번호는 500 대신 404 (PR #82)
+- [x] 4번 점검 반영: 승인 · 취소 동시 요청은 예약 행 잠금으로 늦은 쪽 409 (PR #84), 체크인이 지난 대기 예약은 승인 불가 · 취소로만 정리 (PR #88)
 
 ### 3-B 후보 (해커톤 뒤)
 
