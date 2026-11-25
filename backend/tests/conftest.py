@@ -15,14 +15,12 @@ os.environ["DB_SCHEMA"] = f"{_mine}_test"  # 앱 import 전에 (설정 · 엔진
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.api.routes import members  # noqa: E402
 from app.db.init_db import init_db  # noqa: E402
 from app.main import app  # noqa: E402
 
 
 @pytest.fixture
 def client():
-    members._fails.clear()
     return TestClient(app)
 
 

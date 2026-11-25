@@ -18,7 +18,7 @@ DELETE /admin/closures/{closureId}                           묶음 해제 (날�
 - 지난 날짜도 지정 · 해제 가능(#32 팀 결정: 잘못 넣은 기록을 고칠 수 있게). 사유 필수.
 - 기간 지정이 막히면 막힌 날짜를 모두 알려 준다(#29, detail.blockedDates).
 - 한 번 지정(하루든 기간이든) = 휴무 묶음(closure) 1개. 사유 분류 · 상세 · 지정자는 묶음에 한 번만(3-A1~A3).
-  closed_date.reason 에는 화면 표시용 "점검 · 보일러"를 같이 적는다(③단계에서 칸 삭제 전까지 다른 파트 호환).
+  응답의 reason 은 화면 표시용 "점검 · 보일러"(묶음에서 만듦).
 - 날짜 · 기간 해제로 묶음의 날짜가 모두 없어지면 묶음도 지운다.
 """
 import calendar
@@ -32,7 +32,7 @@ from app.api.deps import DB, AdminMember, require_admin
 from app.core.dates import today_kst
 from app.core.exceptions import fail
 from app.models import ClosedDate, Closure, Reservation, Room
-from app.models.closure import REASON_LABELS
+from app.models.closure import closure_label
 from app.models.reservation import LIVE_STATUSES
 from app.schemas.closed_date import (
     ClosedDateCreate,
@@ -59,10 +59,11 @@ def month_range(month: str) -> tuple[date, date]:
     return date(year, mon, 1), date(year, mon, calendar.monthrange(year, mon)[1])
 
 
-def to_out(row: ClosedDate, room_name: str | None) -> ClosedDateOut:
-    out = ClosedDateOut.model_validate(row)
-    out.room_name = room_name
-    return out
+def to_out(row: ClosedDate, room_name: str | None, reason: str | None) -> ClosedDateOut:
+    return ClosedDateOut(
+        closed_date_id=row.closed_date_id, room_id=row.room_id, room_name=room_name,
+        closed_date=row.closed_date, reason=reason, closure_id=row.closure_id,
+    )
 
 
 def live_stays(room_id: int | None):
@@ -78,14 +79,15 @@ def list_closed_dates(db: DB, month: str = MonthQuery, room_id: int | None = Roo
     """roomId 없음 = 모든 휴무. roomId 있음 = 호텔 전체 휴무 + 그 방 휴무."""
     first, last = month_range(month)
     q = (
-        select(ClosedDate, Room.room_name)
+        select(ClosedDate, Room.room_name, Closure.reason_code, Closure.reason)
+        .join(Closure, Closure.closure_id == ClosedDate.closure_id)
         .outerjoin(Room, Room.room_id == ClosedDate.room_id)
         .where(ClosedDate.closed_date.between(first, last))
     )
     if room_id is not None:
         q = q.where(or_(ClosedDate.room_id.is_(None), ClosedDate.room_id == room_id))
     rows = db.execute(q.order_by(ClosedDate.closed_date, ClosedDate.room_id)).all()
-    return [to_out(row, name) for row, name in rows]
+    return [to_out(row, name, closure_label(code, detail)) for row, name, code, detail in rows]
 
 
 @router.get("/reservation-counts", response_model=dict[str, int])
@@ -144,7 +146,7 @@ def check_input(db: DB, room_id: int | None, reason_code: str | None, reason: st
     detail = (reason or "").strip() or None
     if code == "ETC" and not detail:
         fail(400, "INVALID_INPUT", "휴무 사유를 입력해 주세요.")
-    label = detail if code == "ETC" else " · ".join(filter(None, [REASON_LABELS[code], detail]))
+    label = closure_label(code, detail)
     room = db.get(Room, room_id) if room_id is not None else None
     if room_id is not None and room is None:
         fail(404, "NOT_FOUND", "없는 객실입니다.")
@@ -234,9 +236,9 @@ def create_closed_date(body: ClosedDateCreate, db: DB, admin: AdminMember):
     if b := blocked_reason(db, body.room_id, body.closed_date):
         code, n = b
         fail(409, code, blocked_message("이 날짜", code, n), **({"reservationCount": n} if n else {}))
-    row = ClosedDate(room_id=body.room_id, closed_date=body.closed_date, reason=reason)
+    row = ClosedDate(room_id=body.room_id, closed_date=body.closed_date)
     save(db, closure, [row])
-    return to_out(row, room.room_name if room else None)
+    return to_out(row, room.room_name if room else None, reason)
 
 
 @router.post("/range", response_model=list[ClosedDateOut], status_code=201)
@@ -255,10 +257,10 @@ def create_closed_date_range(body: ClosedDateRangeCreate, db: DB, admin: AdminMe
     blocked = [(day, *b) for day in dates if (b := blocked_reason(db, body.room_id, day))]
     if blocked:
         fail_blocked(blocked)
-    rows = [ClosedDate(room_id=body.room_id, closed_date=day, reason=reason) for day in dates]
+    rows = [ClosedDate(room_id=body.room_id, closed_date=day) for day in dates]
     save(db, closure, rows)
     name = room.room_name if room else None
-    return [to_out(row, name) for row in rows]
+    return [to_out(row, name, reason) for row in rows]
 
 
 @router.delete("/range")

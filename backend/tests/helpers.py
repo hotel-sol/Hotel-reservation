@@ -19,10 +19,9 @@ def add_closed_date(day: date, room_id: int | None = None, reason: str = "테스
             text("INSERT INTO closure (reason_code, reason) VALUES (:code, :reason) RETURNING closure_id"),
             {"code": reason_code, "reason": reason},
         ).scalar_one()
-        # ponytail: reason 칸은 ③단계에서 지운다 — 그때 이 줄의 reason 만 빼면 된다
         conn.execute(
-            text("INSERT INTO closed_date (room_id, closed_date, reason, closure_id) VALUES (:room, :day, :reason, :cid)"),
-            {"room": room_id, "day": day, "reason": reason, "cid": closure_id},
+            text("INSERT INTO closed_date (room_id, closed_date, closure_id) VALUES (:room, :day, :cid)"),
+            {"room": room_id, "day": day, "cid": closure_id},
         )
     return closure_id
 
