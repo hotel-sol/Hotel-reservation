@@ -89,7 +89,25 @@ export interface ClosedDate {
   roomId: number | null; // null = 호텔 전체 휴무
   roomName: string | null;
   closedDate: string;
-  reason: string | null;
+  reason: string | null; // 화면 표시용 "점검 · 보일러"
+  closureId: number | null; // 휴무 묶음 (3-A1)
+}
+
+/** 휴무 사유 분류 (3-A2): 공사 · 점검 · 행사 · 휴관 · 기타 */
+export type ClosureReasonCode = "CONSTRUCTION" | "MAINTENANCE" | "EVENT" | "CLOSURE" | "ETC";
+
+/** 휴무 묶음 (GET /api/admin/closures). 기간 = 남은 날짜의 처음 · 끝, 상태 = 예정 · 진행 중 · 종료 */
+export interface Closure {
+  closureId: number;
+  roomId: number | null; // null = 호텔 전체 휴무
+  roomName: string | null;
+  reasonCode: ClosureReasonCode;
+  reason: string | null; // 상세 사유
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: "SCHEDULED" | "ACTIVE" | "ENDED";
+  createdBy: number | null;
 }
 
 /** 예약 달력 하루 (RSV-001). reason: 지난 날 · 휴무 · 예약됨, 예약 가능하면 null */
