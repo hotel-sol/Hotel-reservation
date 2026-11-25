@@ -4,6 +4,7 @@ from sqlalchemy import select
 from fastapi import APIRouter
 
 from app.api.deps import DB, CurrentMember
+from app.services.reservation_service import check_pending_limit  # #68 1인 대기 예약 상한
 from app.core.exceptions import fail
 from app.models import Reservation, Room
 from app.schemas.reservation import ReservationCreate, ReservationOut
@@ -28,6 +29,7 @@ def to_out(r: Reservation, room_name: str | None = None) -> ReservationOut:
 
 @router.post("", response_model=ReservationOut, status_code=201)
 def create_reservation(body: ReservationCreate, member: CurrentMember, db: DB):
+    check_pending_limit(db, member.member_id)  # #68: 1인 승인 대기 예약 상한 (회원 행 잠금 → 객실 행 잠금 순서)
     # 객실 행을 잠가서, 같은 방에 동시에 들어온 예약은 먼저 온 쪽이 끝날 때까지 기다리게 한다.
     room = get_bookable_room(db, body.room_id, lock=True)
     nights = check_stay(room, body.check_in_date, body.check_out_date, body.guest_count)

@@ -4,16 +4,41 @@
 """
 from datetime import date, timedelta
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.dates import today_kst
 from app.core.exceptions import fail
-from app.models import Room
+from app.models import Member, Reservation, Room
+from app.models.reservation import PENDING
 
 # 한 번에 예약할 수 있는 범위 (팀 협의 후 조정). 화면 달력(StayCalendar.tsx 의 MAX_NIGHTS)도 같은 값.
 # 상한이 없으면 수십 년짜리 예약으로 방을 막거나, 총액이 DB INT 한도를 넘어 저장이 실패한다.
 MAX_NIGHTS = 30
 BOOKING_WINDOW_DAYS = 365  # 체크인은 오늘부터 이 날수 안
+# 회원 한 명이 동시에 가질 수 있는 승인 대기 예약 수 (#68). 대기 예약도 방을 잡으므로,
+# 상한이 없으면 계정 하나로 모든 방의 날짜를 막을 수 있다.
+MAX_PENDING_PER_MEMBER = 3
+
+
+def check_pending_limit(db: Session, member_id: int) -> None:
+    """아직 끝나지 않은(체크아웃이 오늘 뒤) 승인 대기 예약이 상한이면 409 TOO_MANY_PENDING.
+
+    회원 행을 잠가서 같은 회원의 동시 요청(서로 다른 방이어도)을 한 줄로 세운다.
+    잠금 순서는 회원 → 객실 (예약 저장에서만 회원 행을 잠근다).
+    """
+    db.execute(select(Member.member_id).where(Member.member_id == member_id).with_for_update())
+    pending = db.scalar(
+        select(func.count()).select_from(Reservation).where(
+            Reservation.member_id == member_id,
+            Reservation.status == PENDING,
+            Reservation.check_out_date > today_kst(),  # 이미 끝난 대기 예약은 방을 잡지 않으므로 세지 않음
+        )
+    )
+    if pending >= MAX_PENDING_PER_MEMBER:
+        fail(409, "TOO_MANY_PENDING",
+             f"승인 대기 중인 예약은 최대 {MAX_PENDING_PER_MEMBER}건까지 할 수 있습니다. "
+             "승인되거나 취소된 뒤 다시 예약해 주세요.")
 
 
 def get_bookable_room(db: Session, room_id: int, lock: bool = False) -> Room:
