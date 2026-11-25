@@ -1,7 +1,8 @@
 """관리자) 예약 관리 — ADM-003
 
 상태 전이: PENDING → APPROVED/CANCELED, APPROVED → CANCELED, CANCELED → (불가)
-체크인이 지난 예약은 취소 불가(오늘은 한국 시간 기준). 변경 시 updated_at 기록.
+체크인이 지난 예약(오늘은 한국 시간 기준): 승인 예약은 취소 불가, 대기 예약은 승인 불가 · 취소로만 정리.
+변경 시 updated_at 기록.
 취소하면 canceled_at(취소 시각) · canceled_by(취소한 관리자 member_id)도 남긴다 (4-A4).
 동시에 눌러도 서로 덮어쓰지 않게 상태를 바꿀 예약 행을 잠그고 읽는다.
 
@@ -104,8 +105,13 @@ def _change_status(db, reservation_id: int, to: str, admin: Member) -> Reservati
     allowed = {PENDING: {APPROVED, CANCELED}, APPROVED: {CANCELED}, CANCELED: set()}
     if to not in allowed[r.status]:
         fail(409, "INVALID_STATUS", f"이미 {STATUS_LABEL[r.status]} 상태인 예약이라 {STATUS_LABEL[to]}할 수 없습니다.")
-    if to == CANCELED and r.check_in_date < today_kst():
-        fail(409, "PAST_CHECK_IN", "체크인이 지난 예약은 취소할 수 없습니다.")
+    if r.check_in_date < today_kst():
+        # 체크인이 지난 예약: 승인 예약은 실제로 묵은 기록이라 취소하지 않는다.
+        # 대기 예약은 묵지 않은 예약이라 승인하지 않고 취소로만 정리한다("승인 대기"에 계속 남지 않게).
+        if to == APPROVED:
+            fail(409, "PAST_CHECK_IN", "체크인이 지난 예약은 승인할 수 없습니다. 취소로 정리해 주세요.")
+        if r.status == APPROVED:
+            fail(409, "PAST_CHECK_IN", "체크인이 지난 예약은 취소할 수 없습니다.")
     r.status = to
     # created_at 과 같은 DB 시계(now())로 남긴다. 서버 PC 시간대(datetime.now())와 섞이지 않게
     r.updated_at = func.now()

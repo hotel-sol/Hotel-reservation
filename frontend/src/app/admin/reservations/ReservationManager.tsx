@@ -12,7 +12,8 @@ import type { Page, Reservation, ReservationStatus, ReservationStatusCounts } fr
  * ADM-003 관리자 예약 관리
  *  ① 상태 탭      처음엔 "승인 대기". 탭 옆 숫자 = 지금 검색 조건에서 그 상태의 예약 수
  *  ② 검색         체크인 기간, 예약자명 또는 예약 번호
- *  ③ 승인 / 취소  대기: 승인 · 취소, 승인: 취소만, 취소: 없음. 체크인이 지난 예약은 취소 버튼 없음
+ *  ③ 승인 / 취소  대기: 승인 · 취소, 승인: 취소만, 취소: 없음.
+ *                 체크인이 지난 예약: 대기는 취소만(승인 불가), 승인은 버튼 없음
  *  ④ 확인 팝업    예약 내용과 요청 사항을 한 번 더 보여주고 확인
  */
 const TABS: { value: ReservationStatus | ""; label: string; countKey: keyof ReservationStatusCounts }[] = [
@@ -54,8 +55,12 @@ export default function ReservationManager() {
   }, [status, filter, page, reloadKey]);
 
   const todayStr = today();
-  // 체크인 날(오늘)까지는 취소 가능, 지난 예약은 백엔드가 409 PAST_CHECK_IN 으로 막으므로 버튼을 숨긴다
-  const canCancel = (r: Reservation) => r.status !== "CANCELED" && r.checkInDate >= todayStr;
+  // 백엔드 규칙과 같게 버튼을 보인다 (어긋나면 409 PAST_CHECK_IN)
+  //  - 체크인 날(오늘)까지: 대기는 승인 · 취소, 승인은 취소
+  //  - 체크인이 지남: 대기는 묵지 않은 예약이라 취소로만 정리, 승인은 묵은 기록이라 그대로 둔다
+  const isPast = (r: Reservation) => r.checkInDate < todayStr;
+  const canApprove = (r: Reservation) => r.status === "PENDING" && !isPast(r);
+  const canCancel = (r: Reservation) => r.status === "PENDING" || (r.status === "APPROVED" && !isPast(r));
 
   return (
     <div className="space-y-4">
@@ -108,7 +113,10 @@ export default function ReservationManager() {
                 <td>{won(r.totalPrice)}</td>
                 <td><StatusBadge status={r.status} /></td>
                 <td className="space-x-1 whitespace-nowrap pr-3 text-right">
-                  {r.status === "PENDING" && (
+                  {r.status === "PENDING" && isPast(r) && (
+                    <span className="text-xs text-amber-700">체크인 지남</span>
+                  )}
+                  {canApprove(r) && (
                     <button type="button" className="btn-primary px-2 py-1"
                       onClick={() => setConfirming({ r, action: "approve" })}>승인</button>
                   )}
@@ -116,7 +124,7 @@ export default function ReservationManager() {
                     <button type="button" className="btn-outline px-2 py-1"
                       onClick={() => setConfirming({ r, action: "cancel" })}>취소</button>
                   )}
-                  {r.status !== "PENDING" && !canCancel(r) && (
+                  {!canApprove(r) && !canCancel(r) && (
                     <span className="text-slate-400" title={r.status === "CANCELED" ? "취소된 예약" : "체크인이 지난 예약"}>-</span>
                   )}
                 </td>
