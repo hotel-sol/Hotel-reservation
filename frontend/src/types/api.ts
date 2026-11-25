@@ -80,6 +80,8 @@ export interface Reservation {
   totalPrice: number;
   status: ReservationStatus;
   requestMemo: string | null;
+  canceledAt: string | null; // 취소 시각 (취소 예약만)
+  canceledBy: number | null; // 취소한 회원 번호 (관리자 취소면 그 관리자)
   createdAt: string;
   updatedAt: string;
 }

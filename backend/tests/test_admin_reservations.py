@@ -109,3 +109,33 @@ def test_updated_at_uses_same_clock_as_created_at(client):
             {"id": rid},
         ).scalar_one()
     assert 0 <= gap < 600  # 같은 시계라면 몇 초 차이. 시간대가 섞이면 9시간(32400초) 차이가 난다
+
+
+def test_cancel_records_when_and_which_admin(client):
+    """4-A4: 관리자가 취소하면 canceled_at(DB 시계) · canceled_by(그 관리자 member_id)를 남긴다. 승인은 비워 둔다."""
+    rid = add_reservation(TODAY + timedelta(days=50))
+    approved = client.patch(f"{API}/{rid}/approve", headers=ADMIN).json()
+    assert approved["canceledAt"] is None and approved["canceledBy"] is None
+
+    body = client.patch(f"{API}/{rid}/cancel", headers=ADMIN).json()
+    assert body["status"] == "CANCELED"
+    assert body["canceledBy"] == 1  # 시드 1번 = 관리자
+    assert body["canceledAt"] is not None
+    with engine.connect() as conn:
+        canceled_by, gap = conn.execute(
+            text("SELECT canceled_by, EXTRACT(EPOCH FROM (now()::timestamp - canceled_at))"
+                 " FROM reservation WHERE reservation_id = :id"),
+            {"id": rid},
+        ).one()
+    assert canceled_by == 1
+    assert 0 <= gap < 600  # DB now() 로 남겨서 시간대가 섞이지 않는다
+
+
+def test_failed_cancel_leaves_no_record(client):
+    past = add_reservation(TODAY - timedelta(days=1), status="APPROVED")
+    assert client.patch(f"{API}/{past}/cancel", headers=ADMIN).status_code == 409
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT canceled_at, canceled_by FROM reservation WHERE reservation_id = :id"), {"id": past}
+        ).one()
+    assert tuple(row) == (None, None)

@@ -31,6 +31,8 @@ class ReservationOut(CamelModel):
     total_price: int
     status: str
     request_memo: str | None
+    canceled_at: datetime | None = None
+    canceled_by: int | None = None  # 취소한 회원 번호 (관리자 취소면 그 관리자)
     created_at: datetime
     updated_at: datetime
 
