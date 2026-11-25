@@ -3,6 +3,7 @@
 상태 전이: PENDING → APPROVED/CANCELED, APPROVED → CANCELED, CANCELED → (불가)
 체크인이 지난 예약은 취소 불가(오늘은 한국 시간 기준). 변경 시 updated_at 기록.
 취소하면 canceled_at(취소 시각) · canceled_by(취소한 관리자 member_id)도 남긴다 (4-A4).
+동시에 눌러도 서로 덮어쓰지 않게 상태를 바꿀 예약 행을 잠그고 읽는다.
 
 GET   /admin/reservations?status=&from=&to=&keyword=&page=&size=   목록 (① 탭 · ② 검색)
 GET   /admin/reservations/counts?from=&to=&keyword=                 상태별 건수 (① 탭 옆 숫자)
@@ -94,7 +95,12 @@ def status_counts(
 
 
 def _change_status(db, reservation_id: int, to: str, admin: Member) -> Reservation:
-    r = db.get(Reservation, reservation_id) or fail(404, "RESERVATION_NOT_FOUND", "예약을 찾을 수 없습니다.")
+    # 예약 행을 잠근다(SELECT … FOR UPDATE). 두 관리자가 거의 동시에 승인 · 취소를 눌러도 뒤의 요청은 앞 요청이
+    # commit 할 때까지 기다렸다가 바뀐 상태를 읽고 409 가 된다. 잠그지 않으면 둘 다 옛 상태를 읽고 성공해서
+    # "취소 정보가 있는 승인 예약"이 생기고, 그사이 그 날짜에 들어온 다른 예약과 이중 예약이 될 수 있다.
+    r = db.get(Reservation, reservation_id, with_for_update=True) or fail(
+        404, "RESERVATION_NOT_FOUND", "예약을 찾을 수 없습니다."
+    )
     allowed = {PENDING: {APPROVED, CANCELED}, APPROVED: {CANCELED}, CANCELED: set()}
     if to not in allowed[r.status]:
         fail(409, "INVALID_STATUS", f"이미 {STATUS_LABEL[r.status]} 상태인 예약이라 {STATUS_LABEL[to]}할 수 없습니다.")
