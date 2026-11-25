@@ -256,3 +256,34 @@ def test_other_integrity_errors_are_not_hidden(client, monkeypatch):
     fail_commit_with(monkeypatch, psycopg.errors.CheckViolation())  # 23514: 겹침이 아니면 그대로 오류
     with pytest.raises(IntegrityError):
         reserve(client, D1)
+
+
+# ---- 예약 때의 1박 요금 저장 · 응답 (#60 4번-①, 4-A3) ----
+
+def test_reservation_saves_price_per_night(client):
+    r = reserve(client, D1, nights=3, room_id=3)  # 201호 120000원
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["pricePerNight"] == 120000
+    assert body["totalPrice"] == body["pricePerNight"] * 3
+
+    rid = body["reservationId"]
+    assert client.get(f"{API}/{rid}", headers=GUEST).json()["pricePerNight"] == 120000  # 완료 화면
+    mine = {x["reservationId"]: x for x in client.get(f"{API}/me", headers=GUEST).json()}
+    assert mine[rid]["pricePerNight"] == 120000  # 내 예약
+
+    q = quote(client, D1, nights=3, room_id=3).json()  # 견적과 같은 값
+    assert (q["pricePerNight"], q["totalPrice"]) == (body["pricePerNight"], body["totalPrice"])
+
+
+def test_price_per_night_may_be_empty_for_old_rows():
+    """③단계 전에는 비어 있는 옛 예약이 있을 수 있다(R5) → 응답은 null, 화면은 총액만."""
+    from datetime import datetime
+
+    from app.schemas.reservation import ReservationOut
+    out = ReservationOut(
+        reservation_id=1, member_id=2, room_id=1, check_in_date=D1, check_out_date=D1 + timedelta(days=1),
+        guest_count=1, total_price=80000, price_per_night=None, status="PENDING", request_memo=None,
+        created_at=datetime.now(), updated_at=datetime.now(),
+    )
+    assert out.model_dump(by_alias=True)["pricePerNight"] is None

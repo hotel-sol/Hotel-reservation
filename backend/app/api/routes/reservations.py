@@ -9,7 +9,7 @@ from app.core.exceptions import fail
 from app.models import Reservation, Room
 from app.schemas.reservation import ReservationCreate, ReservationOut
 from app.services.availability_service import block_reason
-from app.services.reservation_service import check_stay, get_bookable_room, total_price
+from app.services.reservation_service import check_stay, get_bookable_room, night_price, total_price
 
 router = APIRouter(prefix="/reservations", tags=["reservations"])
 
@@ -55,6 +55,7 @@ def create_reservation(body: ReservationCreate, member: CurrentMember, db: DB):
         check_out_date=body.check_out_date,
         guest_count=body.guest_count,
         total_price=total_price(room, nights),
+        price_per_night=night_price(room),
         request_memo=body.request_memo,
     )
     db.add(reservation)
