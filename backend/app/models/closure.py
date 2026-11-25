@@ -10,6 +10,11 @@ REASON_CODES = ("CONSTRUCTION", "MAINTENANCE", "EVENT", "CLOSURE", "ETC")
 REASON_LABELS = {"CONSTRUCTION": "공사", "MAINTENANCE": "점검", "EVENT": "행사", "CLOSURE": "휴관", "ETC": "기타"}
 
 
+def closure_label(code: str, detail: str | None) -> str:
+    """화면 표시용 사유: "점검 · 보일러", 기타는 상세만."""
+    return (detail or "") if code == "ETC" else " · ".join(filter(None, [REASON_LABELS[code], detail]))
+
+
 class Closure(Base):
     """휴무 묶음(3-A1) — 한 번에 지정한 기간 하나. 날짜 행(closed_date)이 closure_id 로 묶인다."""
 
