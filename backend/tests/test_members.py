@@ -244,7 +244,7 @@ def test_withdraw_keeps_reservation_rows(client):
     client.cookies.clear()
     assert login(client).status_code == 401
     row = sql("SELECT login_id, name, phone, email, password FROM member")[0]
-    assert dict(row) == {"login_id": f"withdrawn-{me['memberId']}", "name": "탈퇴회원", "phone": None, "email": None,
+    assert dict(row) == {"login_id": f"withdrawn-{me['memberId']}", "name": "탈퇴회원", "phone": "", "email": None,
                          "password": "!"}
     assert sql("SELECT COUNT(*) AS n FROM reservation")[0]["n"] == 1  # 예약 기록은 남는다
     assert signup(client).status_code == 201  # 같은 아이디로 다시 가입 가능

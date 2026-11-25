@@ -4,8 +4,8 @@ import { nightsBetween, today } from "@/lib/format";
  * 예약할 수 있는 기간 (#77). 백엔드 reservation_service 의 MAX_NIGHTS · BOOKING_WINDOW_DAYS,
  * 예약 달력(StayCalendar.tsx)과 같은 값 — 바꾸면 셋 다 바꾼다.
  */
-export const MAX_NIGHTS = 30;
-export const BOOKING_WINDOW_DAYS = 365;
+export const MAX_NIGHTS = 6;
+export const BOOKING_WINDOW_DAYS = 30;
 
 /** YYYY-MM-DD 에 n 일 더하기 */
 export function addDays(date: string, n: number): string {
