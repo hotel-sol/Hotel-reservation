@@ -63,7 +63,8 @@ def test_create_reservation_saves_price_and_pending(client):
 
 
 def test_overlap_is_room_not_available(client):
-    add_reservation(room_id=1, check_in=D1, nights=2)  # D1, D1+1 숙박. D1+2 는 체크아웃
+    # D1, D1+1 숙박. D1+2 는 체크아웃. 다른 회원(1번)의 예약으로 둬서 guest1 의 대기 예약 상한(#68)에 안 걸리게
+    helpers.add_reservation(1, D1, 2, total_price=80000, member_id=1)
     r = reserve(client, D1 + timedelta(days=1))
     assert r.status_code == 409
     assert code(r) == "ROOM_NOT_AVAILABLE"
@@ -71,7 +72,8 @@ def test_overlap_is_room_not_available(client):
 
     assert reserve(client, D1 - timedelta(days=1), nights=1).status_code == 201  # 체크인 날에 체크아웃
     assert reserve(client, D1 + timedelta(days=2)).status_code == 201  # 체크아웃 날에 체크인
-    assert reserve(client, D1, room_id=2).status_code == 201  # 다른 방은 가능
+    # 다른 방은 가능 (guest1 은 시드 대기 1건 + 위 2건으로 대기 상한 3건이라 1번 회원으로 확인, #68)
+    assert reserve(client, D1, room_id=2, headers=ADMIN).status_code == 201
 
 
 def test_canceled_reservation_does_not_block(client):
