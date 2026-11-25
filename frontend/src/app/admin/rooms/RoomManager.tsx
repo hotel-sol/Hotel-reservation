@@ -162,7 +162,9 @@ export default function RoomManager() {
     const gNext = gradeOf(next.gradeId);
     if (gNext) {
       const priceWasAuto = !before.price || (!!gBefore && before.price === autoPrice(gBefore, before.viewType));
-      if (!("price" in patch) && priceWasAuto) next.price = autoPrice(gNext, next.viewType);
+      // 요금 자동 계산은 새 객실 등록 때만 (준엽님 점검): 수정에서 전망만 바꿨는데 요금이 같이 바뀌면
+      // 예약이 있는 방은 서버가 요금 변경으로 보고 409. 수정 때 요금을 바꾸려면 "등급 · 전망 기준" 버튼을 누른다
+      if (!("price" in patch) && priceWasAuto && editing.id === null) next.price = autoPrice(gNext, next.viewType);
       const descWasAuto = !before.description?.trim()
         || (!!gBefore && before.description === descTemplate(gBefore, editing.roomNo, before.viewType, before.bedType));
       if (descWasAuto) next.description = descTemplate(gNext, roomNo, next.viewType, next.bedType);

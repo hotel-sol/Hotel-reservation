@@ -62,8 +62,10 @@ def too_many() -> None:
     fail(409, "TOO_MANY_FILES", f"객실 사진은 최대 {MAX_FILES_PER_ROOM}장까지 올릴 수 있습니다.")
 
 
+# async 가 아닌 일반 def (준엽님 점검): 안에서 DB · Storage(최대 20초)를 기다리는 동안 서버 전체가 멈추지 않게.
+# 일반 def 는 FastAPI 가 따로 일꾼(스레드)에 맡겨서, 그동안 다른 손님의 예약 · 로그인은 그대로 처리된다
 @router.post("", response_model=FileOut, status_code=201)
-async def upload_file(
+def upload_file(
     admin: AdminMember,
     db: DB,
     target_type: str = Form(..., alias="targetType"),
@@ -77,7 +79,7 @@ async def upload_file(
     if ext not in ALLOWED:
         fail(400, "INVALID_FILE_TYPE", "jpg 또는 png 파일만 올릴 수 있습니다.")
 
-    data = await file.read(MAX_BYTES + 1)
+    data = file.file.read(MAX_BYTES + 1)
     if not data:
         fail(400, "EMPTY_FILE", "빈 파일입니다.")
     if len(data) > MAX_BYTES:
