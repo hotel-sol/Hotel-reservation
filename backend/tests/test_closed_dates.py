@@ -315,3 +315,30 @@ def test_closures_admin_only(client):
     assert closures(client, headers=GUEST).status_code == 403
     assert closures(client, headers={}).status_code == 401
     assert client.delete("/api/admin/closures/1", headers=GUEST).status_code == 403
+
+
+# ---- #27 손님 예약 달력(4번 available-dates)에서 휴무일이 막히는지 ----
+
+def calendar(client, room_id, month=D1):
+    r = client.get(f"/api/rooms/{room_id}/available-dates?month={month:%Y-%m}")
+    assert r.status_code == 200, r.text
+    return {d["day"]: d for d in r.json()["days"]}
+
+
+def test_closed_dates_block_guest_calendar(client):
+    hotel, room1, room2 = D1, D1 + timedelta(days=2), D1 + timedelta(days=4)
+    helpers.add_closed_date(hotel)               # 호텔 전체 휴무
+    helpers.add_closed_date(room1, room_id=1)    # 1번 방만 휴무
+    helpers.add_closed_date(room2, room_id=2)    # 다른 방(2번)만 휴무
+
+    cal = calendar(client, 1)
+    assert (cal[hotel.isoformat()]["available"], cal[hotel.isoformat()]["reason"]) == (False, "CLOSED")
+    assert (cal[room1.isoformat()]["available"], cal[room1.isoformat()]["reason"]) == (False, "CLOSED")
+    assert cal[room2.isoformat()]["available"] is True                     # 다른 방 휴무는 이 방과 무관
+    assert cal[(room1 - timedelta(days=1)).isoformat()]["available"] is True  # 휴무 전날(= 체크아웃 날)은 선택 가능
+    assert calendar(client, 2)[room2.isoformat()]["reason"] == "CLOSED"     # 2번 방 달력에서는 막힘
+
+    # 휴무를 해제하면 다시 열림 (관리자 화면에서 묶음째 해제)
+    for c in client.get(f"/api/admin/closures?month={D1:%Y-%m}", headers=ADMIN).json():
+        client.delete(f"/api/admin/closures/{c['closureId']}", headers=ADMIN)
+    assert all(d["available"] for day, d in calendar(client, 1).items() if day >= D1.isoformat())
