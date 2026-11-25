@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Field, Notice, PasswordInput, fieldProps } from "@/components/FormField";
+import { Field, Notice, PasswordInput, fieldProps, formatPhone } from "@/components/FormField";
 import { ApiError } from "@/lib/api/client";
 import { membersApi } from "@/lib/api/members";
 
@@ -21,7 +21,7 @@ function check(f: typeof EMPTY): Partial<Record<Key, string>> {
   if (!f.name.trim()) e.name = "이름을 적어 주세요.";
   else if (f.name.trim().length > 50) e.name = "50자까지 쓸 수 있어요.";
   if (f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) e.email = "이메일 형식이 아니에요. 예: guest@example.com";
-  if (f.phone && !/^[0-9-]{9,20}$/.test(f.phone.trim())) e.phone = "숫자와 - 로 9~20자. 예: 010-1234-5678";
+  if (f.phone && !/^[0-9-]{9,20}$/.test(f.phone.trim())) e.phone = "전화번호를 끝까지 적어 주세요. 예: 010-1234-5678";
   return e;
 }
 
@@ -41,7 +41,8 @@ export default function SignupForm() {
   const shown = (k: Key) => (submitted || touched[k] ? errors[k] : undefined);
   const bind = (k: Key) => ({
     value: form[k],
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value }),
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+      setForm({ ...form, [k]: k === "phone" ? formatPhone(e.target.value) : e.target.value }),
     onBlur: () => setTouched((t) => ({ ...t, [k]: true })),
   });
 
@@ -116,8 +117,8 @@ export default function SignupForm() {
         <input {...fieldProps("su-email", shown("email"))} {...bind("email")} type="email" autoComplete="email" maxLength={100} />
       </Field>
 
-      <Field id="su-phone" label="전화번호" optional hint="예: 010-1234-5678" error={shown("phone")}>
-        <input {...fieldProps("su-phone", shown("phone"))} {...bind("phone")} type="tel" autoComplete="tel" maxLength={20} />
+      <Field id="su-phone" label="전화번호" optional hint="숫자만 쓰면 - 는 자동으로 들어가요. 예: 010-1234-5678" error={shown("phone")}>
+        <input {...fieldProps("su-phone", shown("phone"))} {...bind("phone")} type="tel" inputMode="numeric" autoComplete="tel" maxLength={13} />
       </Field>
 
       <button className="btn-primary w-full py-2.5">가입하기</button>

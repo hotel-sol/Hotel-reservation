@@ -59,6 +59,15 @@ export function PasswordInput(props: InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
+/** 전화번호: 숫자만 남기고 "-"를 자동으로 넣는다. 010-1234-5678 · 02-123-4567 · 031-123-4567 */
+export function formatPhone(value: string): string {
+  const d = value.replace(/\D/g, "").slice(0, 11);
+  const [a, b] = d.startsWith("02") ? [2, d.length > 9 ? 4 : 3] : [3, d.length > 10 ? 4 : 3];
+  if (d.length <= a) return d;
+  if (d.length <= a + b) return `${d.slice(0, a)}-${d.slice(a)}`;
+  return `${d.slice(0, a)}-${d.slice(a, a + b)}-${d.slice(a + b)}`;
+}
+
 /** 화면 위쪽 알림 상자(성공 · 오류) */
 export function Notice({ tone, children }: { tone: "ok" | "error"; children: ReactNode }) {
   const color = tone === "ok" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-700";

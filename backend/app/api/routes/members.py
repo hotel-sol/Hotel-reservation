@@ -201,11 +201,18 @@ def withdraw(body: WithdrawRequest, response: Response, member: CurrentMember, d
 @router.post("/password-reset", status_code=204)
 def reset_password(body: PasswordResetRequest, db: DB):
     # ponytail: 메일 서버가 없어서 "아이디 + 가입 이메일"이 맞으면 바로 바꾼다.
-    # 이메일을 아는 남도 바꿀 수 있으니, 공개 배포 전에 메일로 보내는 일회용 링크로 바꾼다.
+    # 이메일을 아는 남도 바꿀 수 있으니, 공개 배포 전에 메일로 보내는 일회용 링크로 바꾼다(Step 3 1-A4).
+    # 관리자 계정은 여기서 바꾸지 않는다: 이메일만 알면 관리자 계정을 가져갈 수 있어서(11-25 조준엽 제보).
+    # 틀렸을 때와 같은 문구로 막아서 "관리자 아이디"라는 힌트도 주지 않는다. 관리자 비밀번호는 create_admin 으로.
     key = f"reset:{body.login_id.lower()}"
     check_not_locked(key)
     member = db.scalar(select(Member).where(Member.login_id == body.login_id))
-    if member is None or not member.email or member.email.lower() != body.email.strip().lower():
+    if (
+        member is None
+        or member.role == "ADMIN"
+        or not member.email
+        or member.email.lower() != body.email.strip().lower()
+    ):
         record_fail(key)
         fail(400, "NOT_MATCHED", "아이디와 가입한 이메일이 맞지 않습니다.")
     member.password = hash_password(body.new_password)

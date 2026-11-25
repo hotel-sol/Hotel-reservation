@@ -162,6 +162,22 @@ def test_password_reset_with_email(client):
     assert login(client, password="resetpass1").status_code == 200
 
 
+def test_password_reset_refuses_admin(client):
+    """이메일만 알면 관리자 계정을 가져갈 수 있던 문제(11-25): 관리자는 틀렸을 때와 같은 답으로 거절"""
+    create_admin.create_admin("boss01", "관리자", "adminpass1")
+    login(client, "boss01", "adminpass1")
+    assert client.put("/api/members/me", json={"name": "관리자", "email": "boss@example.com"}).status_code == 200
+    client.cookies.clear()
+
+    r = client.post("/api/members/password-reset",
+                    json={"loginId": "boss01", "email": "boss@example.com", "newPassword": "stolenpass1"})
+    assert r.status_code == 400
+    assert r.json()["detail"]["code"] == "NOT_MATCHED"
+    assert r.json()["detail"]["message"] == "아이디와 가입한 이메일이 맞지 않습니다."  # 손님이 틀렸을 때와 같은 문구
+    assert login(client, "boss01", "stolenpass1").status_code == 401  # 비밀번호는 그대로
+    assert login(client, "boss01", "adminpass1").status_code == 200
+
+
 def test_admin_cannot_withdraw_and_create_admin(client):
     assert create_admin.create_admin("boss01", "관리자", "adminpass1") == "created"
     assert login(client, "boss01", "adminpass1").json()["role"] == "ADMIN"

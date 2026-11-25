@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Field, Notice, PasswordInput, fieldProps } from "@/components/FormField";
+import { Field, Notice, PasswordInput, fieldProps, formatPhone } from "@/components/FormField";
 import { ApiError } from "@/lib/api/client";
 import { membersApi, type ProfileInput } from "@/lib/api/members";
 import type { Member } from "@/types/api";
@@ -115,8 +115,9 @@ function ProfileCard({ me, onSaved }: { me: Member; onSaved: (m: Member) => void
           <Field id="me-name" label="이름">
             <input {...fieldProps("me-name", undefined, false)} value={form.name} onChange={set("name")} required maxLength={50} autoComplete="name" />
           </Field>
-          <Field id="me-phone" label="전화번호" optional hint="숫자와 - 만. 예: 010-1234-5678">
-            <input {...fieldProps("me-phone")} type="tel" value={form.phone ?? ""} onChange={set("phone")} maxLength={20} autoComplete="tel" />
+          <Field id="me-phone" label="전화번호" optional hint="숫자만 쓰면 - 는 자동으로 들어가요.">
+            <input {...fieldProps("me-phone")} type="tel" inputMode="numeric" value={form.phone ?? ""}
+              onChange={(e) => setForm({ ...form, phone: formatPhone(e.target.value) })} maxLength={13} autoComplete="tel" />
           </Field>
           <Field id="me-email" label="이메일" optional hint="비밀번호 찾기에 써요.">
             <input {...fieldProps("me-email")} type="email" value={form.email ?? ""} onChange={set("email")} maxLength={100} autoComplete="email" />
