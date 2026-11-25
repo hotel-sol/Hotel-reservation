@@ -22,8 +22,4 @@ export const membersApi = {
     api<void>("/members/me/password", { method: "PUT", json: { currentPassword, newPassword } }),
   // 409 HAS_RESERVATION(진행 중 예약) · 400 ADMIN_CANNOT_WITHDRAW
   withdraw: (password: string) => api<void>("/members/me/withdraw", { method: "POST", json: { password } }),
-
-  // 비밀번호 찾기: 아이디 + 가입 이메일이 맞으면 바로 새 비밀번호로 바꾼다
-  resetPassword: (body: { loginId: string; email: string; newPassword: string }) =>
-    api<void>("/members/password-reset", { method: "POST", json: body }),
 };

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { Field, Notice, PasswordInput, fieldProps } from "@/components/FormField";
 import { ApiError } from "@/lib/api/client";
 import { membersApi } from "@/lib/api/members";
 
@@ -18,8 +19,15 @@ function internalUrl(next: string | null): string | null {
   }
 }
 
+// 다른 화면에서 끝내고 넘어올 때 보여 줄 안내(?done=)
+const DONE: Record<string, string> = {
+  joined: "가입이 끝났어요. 로그인해 주세요.",
+};
+
 export default function LoginForm() {
-  const next = useSearchParams().get("next");
+  const params = useSearchParams();
+  const next = params.get("next");
+  const done = DONE[params.get("done") ?? ""];
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -40,17 +48,22 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={submit} className="card space-y-3">
-      <input className="input" placeholder="아이디" value={loginId} onChange={(e) => setLoginId(e.target.value)} required />
-      <input className="input" type="password" placeholder="비밀번호" value={password}
-        onChange={(e) => setPassword(e.target.value)} required />
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button className="btn-primary w-full">로그인</button>
-      <p className="text-center text-sm text-slate-500">
-        계정이 없나요? <Link href="/signup" className="text-blue-600">회원가입</Link>
-        <span className="mx-2 text-slate-300">|</span>
-        <Link href="/password-reset" className="text-blue-600">비밀번호 찾기</Link>
-      </p>
+    <form onSubmit={submit} className="space-y-4">
+      {done && !error && <Notice tone="ok">{done}</Notice>}
+      {error && <Notice tone="error">{error}</Notice>}
+      <Field id="login-id" label="아이디">
+        <input {...fieldProps("login-id", undefined, false)} value={loginId} onChange={(e) => setLoginId(e.target.value)}
+          required autoComplete="username" autoFocus />
+      </Field>
+      <Field id="login-password" label="비밀번호" hint="5번 틀리면 10분 동안 로그인할 수 없어요.">
+        <PasswordInput {...fieldProps("login-password")} value={password} onChange={(e) => setPassword(e.target.value)}
+          required autoComplete="current-password" />
+      </Field>
+      <button className="btn-primary w-full py-2.5">로그인</button>
+      <div className="flex flex-wrap justify-between gap-2 text-sm text-slate-500">
+        <span>아직 회원이 아니신가요? <Link href="/signup" className="font-medium text-blue-600 hover:underline">회원가입</Link></span>
+        <Link href="/password-reset" className="hover:underline">비밀번호 찾기</Link>
+      </div>
     </form>
   );
 }

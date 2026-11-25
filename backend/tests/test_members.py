@@ -66,6 +66,9 @@ def test_signup_rules(client):
     assert signup(client, "other2", email="x@example.com").json()["detail"]["code"] == "DUPLICATE_EMAIL"
     assert signup(client, "ab").status_code == 422  # 아이디 4자 미만
     assert signup(client, "short_pw", password="1234567").status_code == 422
+    assert signup(client, "a" * 21).status_code == 422  # 아이디 20자까지
+    assert signup(client, "long_pw", password="x" * 65).status_code == 422  # 비밀번호 64자까지
+    assert signup(client, "a" * 20, password="x" * 64).status_code == 201
     assert signup(client, "bad_mail", email="not-mail").json()["detail"]["code"] == "INVALID_EMAIL"
     r = client.post("/api/members/signup",
                     json={"loginId": "sneaky", "password": "password123", "name": "x", "role": "ADMIN"})
@@ -93,9 +96,96 @@ def test_login_locks_after_five_failures(client):
     for _ in range(5):
         assert login(client, password="wrong-pass").status_code == 401
     assert login(client).status_code == 429  # 맞는 비밀번호여도 잠김
+    assert login(client, "GUEST01").status_code == 429  # 대소문자만 바꿔도 같은 잠금
     from app.api.routes import members
-    members._fails.clear()  # 10분 지난 것으로 치고
+    members._fails.clear()  # 옛 메모리 기록을 비워도(= 서버 재시작) 잠금은 DB에 남아 있다
+    assert login(client).status_code == 429
+    sql("UPDATE login_attempt SET failed_at = failed_at - INTERVAL '11 minutes'")  # 10분 지난 것으로 치고
     assert login(client).status_code == 200
+    assert sql("SELECT COUNT(*) AS n FROM login_attempt")[0]["n"] == 0  # 성공하면 기록을 지운다
+
+
+def other_device():
+    """다른 사람(다른 브라우저): 쿠키를 따로 가진 새 클라이언트"""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    return TestClient(app)
+
+
+def test_someone_else_cannot_lock_me_out_of_my_device(client):
+    """#67-3: 남이 내 아이디로 일부러 5번 틀려도, 전에 로그인했던 내 기기에서는 들어온다."""
+    signup(client)
+    assert login(client).status_code == 200  # 내 기기: 기기 표(hotel_device)를 받는다
+    assert client.cookies.get("hotel_device")
+    client.post("/api/members/logout")
+
+    attacker = other_device()
+    for _ in range(5):
+        assert login(attacker, password="wrong-pass").status_code == 401
+    assert login(attacker).status_code == 429  # 처음 보는 기기는 잠김(맞는 비밀번호여도)
+    assert login(other_device()).status_code == 429  # 다른 새 기기도 잠김
+    assert login(client).status_code == 200  # 내 기기는 들어옴
+
+
+def test_device_ticket_does_not_help_guessing(client):
+    """기기 표가 있어도 그 기기에서 5번 틀리면 잠기고, 남의 계정에는 내 기기 표가 통하지 않는다."""
+    signup(client)
+    signup(client, "victim01")
+    login(client)  # guest01 의 기기 표
+    for _ in range(5):
+        assert login(client, "victim01", "wrong-pass").status_code == 401
+    assert login(client, "victim01", "password123").status_code == 429  # victim01 은 아이디 잠금 그대로
+    for _ in range(5):
+        assert login(client, password="wrong-pass").status_code == 401
+    assert login(client).status_code == 429  # 내 기기도 5번 틀리면 잠김
+    forged = other_device()
+    forged.cookies.set("hotel_device", "forged.token")
+    r = login(forged)  # 가짜 표 = 처음 보는 기기: 아이디 잠금(안 걸려 있음)으로 세서 들어오고, 진짜 표를 새로 받는다
+    assert r.status_code == 200 and r.cookies.get("hotel_device") not in (None, "forged.token")
+
+
+def test_too_long_login_input_is_422_not_500(client):
+    assert login(client, "a" * 100, "x").status_code == 422
+    assert login(client, "guest01", "x" * 101).status_code == 422
+
+
+def test_parallel_wrong_logins_stop_at_five(client):
+    """동시에 10번 보내도 5번만 확인하고 나머지는 잠김(시도를 한 줄로 세움)."""
+    from concurrent.futures import ThreadPoolExecutor
+    signup(client)
+    with ThreadPoolExecutor(10) as pool:
+        codes = list(pool.map(lambda _: login(other_device(), password="wrong-pass").status_code, range(10)))
+    assert sorted(codes) == [401] * 5 + [429] * 5
+    assert sql("SELECT COUNT(*) AS n FROM login_attempt")[0]["n"] == 5
+
+
+def test_wrong_current_password_locks_too(client):
+    signup(client)
+    login(client)
+    body = {"currentPassword": "wrong-pass", "newPassword": "newpass123"}
+    for _ in range(5):
+        assert client.put("/api/members/me/password", json=body).status_code == 400
+    body["currentPassword"] = "password123"
+    assert client.put("/api/members/me/password", json=body).json()["detail"]["code"] == "TOO_MANY_ATTEMPTS"
+
+
+def test_duplicate_at_same_moment_gives_same_message(client, monkeypatch):
+    """두 사람이 동시에 가입해 앞 검사를 둘 다 통과해도, DB가 막은 뒤 같은 409 문구로 답한다(500 아님)."""
+    from app.api.routes import members
+    signup(client, email="a@example.com")
+    real, calls = members.ensure_unique, []
+
+    def first_check_misses(*args, **kw):  # 앞 검사는 "아직 없음"으로 지나가게(동시에 누른 상황)
+        calls.append(1)
+        if len(calls) > 1:
+            real(*args, **kw)
+
+    monkeypatch.setattr(members, "ensure_unique", first_check_misses)
+    r = signup(client, "GUEST01")
+    assert r.status_code == 409 and r.json()["detail"]["message"] == "이미 사용 중인 아이디입니다."
+    calls.clear()
+    r = signup(client, "other1", email="A@example.com")
+    assert r.status_code == 409 and r.json()["detail"]["message"] == "이미 가입된 이메일입니다."
 
 
 def test_update_profile(client):
@@ -142,24 +232,34 @@ def test_withdraw_keeps_reservation_rows(client):
     client.cookies.clear()
     assert login(client).status_code == 401
     row = sql("SELECT login_id, name, phone, email, password FROM member")[0]
-    assert dict(row) == {"login_id": f"withdrawn_{me['memberId']}", "name": "탈퇴회원", "phone": None, "email": None,
+    assert dict(row) == {"login_id": f"withdrawn-{me['memberId']}", "name": "탈퇴회원", "phone": None, "email": None,
                          "password": "!"}
     assert sql("SELECT COUNT(*) AS n FROM reservation")[0]["n"] == 1  # 예약 기록은 남는다
     assert signup(client).status_code == 201  # 같은 아이디로 다시 가입 가능
 
 
-def test_password_reset_with_email(client):
+def test_withdraw_works_even_if_someone_took_withdrawn_id(client):
+    """#67-4: 누가 withdrawn_N 아이디를 먼저 가입해 둬도 N번 회원 탈퇴가 500 나지 않는다."""
+    signup(client)
+    login(client)
+    me = client.get("/api/members/me").json()
+    client.cookies.clear()
+    assert signup(client, f"withdrawn_{me['memberId']}").status_code == 201
+    assert signup(client, f"withdrawn-{me['memberId']}").status_code == 422  # "-" 는 가입 아이디에 못 쓴다
+    login(client)
+    assert client.post("/api/members/me/withdraw", json={"password": "password123"}).status_code == 204
+
+
+def test_password_reset_is_turned_off(client):
+    """#67-1: 아이디 + 이메일만으로 바꾸면 남이 계정(관리자 포함)을 빼앗을 수 있어 시연 전에는 끈다."""
     signup(client, email="a@example.com")
-    signup(client, "no_mail")
-
-    def reset(**kw):
-        body = {"loginId": "guest01", "email": "a@example.com", "newPassword": "resetpass1", **kw}
-        return client.post("/api/members/password-reset", json=body)
-
-    assert reset(email="b@example.com").json()["detail"]["code"] == "NOT_MATCHED"
-    assert reset(loginId="no_mail", email="").json()["detail"]["code"] == "NOT_MATCHED"  # 이메일 없는 회원
-    assert reset(email="A@Example.com ").status_code == 204  # 대소문자 · 공백 무시
-    assert login(client, password="resetpass1").status_code == 200
+    create_admin.create_admin("boss01", "관리자", "adminpass1")
+    for login_id in ("guest01", "boss01"):
+        r = client.post("/api/members/password-reset",
+                        json={"loginId": login_id, "email": "a@example.com", "newPassword": "stolenpass1"})
+        assert r.status_code == 403 and r.json()["detail"]["code"] == "PASSWORD_RESET_DISABLED"
+    assert login(client, password="stolenpass1").status_code == 401  # 비밀번호는 그대로
+    assert login(client).status_code == 200
 
 
 def test_admin_cannot_withdraw_and_create_admin(client):
@@ -197,7 +297,7 @@ def test_check_id_available_then_taken_ignoring_case(client):
     assert check_id(client, "guest02").json()["available"] is True
 
 
-@pytest.mark.parametrize("login_id", ["abc", "한글아이디", "bad id!", "a" * 51])
+@pytest.mark.parametrize("login_id", ["abc", "한글아이디", "bad id!", "a" * 21])
 def test_check_id_rejects_bad_format(client, login_id):
     r = check_id(client, login_id)
     assert r.status_code == 400 and r.json()["detail"]["code"] == "INVALID_LOGIN_ID"
