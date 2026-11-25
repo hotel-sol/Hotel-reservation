@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.dates import today_kst
 from app.core.security import create_session_token
 from app.db.session import engine
+from tests import helpers
 
 pytestmark = pytest.mark.usefixtures("seeded_db")
 
@@ -23,12 +24,7 @@ TODAY = today_kst()
 
 
 def add_reservation(check_in, status="PENDING", room_id=4):
-    with engine.begin() as conn:
-        return conn.execute(
-            text("INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date, guest_count,"
-                 " total_price, status) VALUES (2, :room, :cin, :cout, 1, 160000, :status) RETURNING reservation_id"),
-            {"room": room_id, "cin": check_in, "cout": check_in + timedelta(days=1), "status": status},
-        ).scalar_one()
+    return helpers.add_reservation(room_id, check_in, 1, status, price_per_night=160000)
 
 
 def ids(client, **params):

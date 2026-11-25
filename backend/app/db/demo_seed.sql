@@ -69,6 +69,13 @@ UPDATE room SET created_at = now() - interval '2 days' WHERE room_name = '1302�
 UPDATE room SET created_at = now() - interval '5 days' WHERE room_name = '1204호';  -- 프리미어
 UPDATE room SET created_at = now() - interval '9 days' WHERE room_name = '0904호';  -- 디럭스
 
+-- 등급 · 전망 · 침대 (2-A1): room_type = 등급명, 설명의 둘째 칸 = 전망, 셋째 칸 = 침대
+UPDATE room r SET grade_id = g.grade_id FROM room_grade g WHERE r.room_type = g.grade_name;
+UPDATE room SET
+  view_type = CASE split_part(description, ' · ', 2)
+                WHEN '리버뷰' THEN 'RIVER' WHEN '시티뷰' THEN 'CITY' WHEN '마운틴뷰' THEN 'MOUNTAIN' END,
+  bed_type  = split_part(description, ' · ', 3);
+
 -- 객실 사진: room_id 는 위 INSERT 순서(1601호 = 1 … 0504호 = 40). 방마다 첫 줄이 대표 사진
 INSERT INTO attach_file (target_type, target_id, original_name, saved_path, file_size) VALUES
   ('ROOM', 1, 'suite_06.jpg', 'room-photos/suite/suite_06.jpg', 183182),
