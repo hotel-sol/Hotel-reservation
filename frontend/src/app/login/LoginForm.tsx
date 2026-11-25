@@ -22,7 +22,6 @@ function internalUrl(next: string | null): string | null {
 // 다른 화면에서 끝내고 넘어올 때 보여 줄 안내(?done=)
 const DONE: Record<string, string> = {
   joined: "가입이 끝났어요. 로그인해 주세요.",
-  reset: "비밀번호를 바꿨어요. 새 비밀번호로 로그인해 주세요.",
 };
 
 export default function LoginForm() {

@@ -1,6 +1,7 @@
 """회원 — 회원가입 · 로그인 · 로그아웃 · 내 정보 · 비밀번호 변경 · 탈퇴 · 비밀번호 찾기
 
 - 로그인 · 비밀번호 확인을 10분 안에 5번 틀리면 10분 잠금(429). 기록은 login_attempt 테이블.
+- 비밀번호 찾기는 시연 전까지 꺼 둔다(#67-1).
 - 비밀번호를 바꾸면 다른 기기의 로그인은 끊기고 지금 기기는 유지.
 - 탈퇴: 예약 기록(FK)을 지키려고 행은 남기고 개인정보만 지운다.
 """
@@ -24,7 +25,6 @@ from app.schemas.member import (
     LoginRequest,
     MemberOut,
     PasswordChange,
-    PasswordResetRequest,
     ProfileUpdate,
     SignupRequest,
     WithdrawRequest,
@@ -161,6 +161,8 @@ def signup(body: SignupRequest, db: DB):
 
 @router.post("/login", response_model=MemberOut)
 def login(body: LoginRequest, response: Response, db: DB):
+    # 잠금은 아이디마다. (아이디, 접속 주소)로 나누는 안(#67-3)은 Next 프록시가 접속 주소를 붙여 주지 않고
+    # 손님이 보낸 X-Forwarded-For 를 그대로 넘겨서, 주소를 꾸며 잠금을 피할 수 있어 쓰지 않았다(11-25 확인).
     key = f"login:{body.login_id.lower()}"
     check_not_locked(db, key)
     member = db.scalar(select(Member).where(Member.login_id == body.login_id))
@@ -215,7 +217,8 @@ def withdraw(body: WithdrawRequest, response: Response, member: CurrentMember, d
     )
     if live:
         fail(409, "HAS_RESERVATION", "진행 중인 예약이 있습니다. 예약을 취소한 뒤 탈퇴해 주세요.")
-    member.login_id = f"withdrawn_{member.member_id}"
+    # "-" 는 가입 아이디에 못 쓰는 기호라 누가 먼저 가입해 둘 수 없다(#67-4: withdrawn_N 선점 → 탈퇴 500)
+    member.login_id = f"withdrawn-{member.member_id}"
     member.password = "!"  # 어떤 비밀번호로도 로그인 불가
     member.name, member.phone, member.email = "탈퇴회원", None, None
     db.commit()
@@ -224,21 +227,7 @@ def withdraw(body: WithdrawRequest, response: Response, member: CurrentMember, d
 
 # ---------- 비밀번호 찾기 ----------
 @router.post("/password-reset", status_code=204)
-def reset_password(body: PasswordResetRequest, db: DB):
-    # ponytail: 메일 서버가 없어서 "아이디 + 가입 이메일"이 맞으면 바로 바꾼다.
-    # 이메일을 아는 남도 바꿀 수 있으니, 공개 배포 전에 메일로 보내는 일회용 링크로 바꾼다(Step 3 1-A4).
-    # 관리자 계정은 여기서 바꾸지 않는다: 이메일만 알면 관리자 계정을 가져갈 수 있어서(11-25 조준엽 제보).
-    # 틀렸을 때와 같은 문구로 막아서 "관리자 아이디"라는 힌트도 주지 않는다. 관리자 비밀번호는 create_admin 으로.
-    key = f"reset:{body.login_id.lower()}"
-    check_not_locked(db, key)
-    member = db.scalar(select(Member).where(Member.login_id == body.login_id))
-    if (
-        member is None
-        or member.role == "ADMIN"
-        or not member.email
-        or member.email.lower() != body.email.strip().lower()
-    ):
-        record_fail(db, key)
-        fail(400, "NOT_MATCHED", "아이디와 가입한 이메일이 맞지 않습니다.")
-    member.password = hash_password(body.new_password)
-    db.commit()
+def reset_password():
+    # 시연 전에는 끈다(#67-1): 메일 서버가 없어서 "아이디 + 가입 이메일"만 맞으면 바로 바꾸는 방식이었는데,
+    # 이메일만 알아내면 남의 계정(관리자 포함)을 빼앗을 수 있었다. 정식은 메일 일회용 링크(1-A4).
+    fail(403, "PASSWORD_RESET_DISABLED", "비밀번호 찾기는 지금 쓸 수 없습니다. 호텔 프런트에 문의해 주세요.")

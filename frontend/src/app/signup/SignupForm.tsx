@@ -113,7 +113,7 @@ export default function SignupForm() {
         <input {...fieldProps("su-name", shown("name"), Boolean(shown("name")))} {...bind("name")} autoComplete="name" maxLength={50} />
       </Field>
 
-      <Field id="su-email" label="이메일" optional hint="비밀번호를 잊었을 때 아이디와 함께 확인해요." error={shown("email")}>
+      <Field id="su-email" label="이메일" optional hint="예약 안내를 받을 때 써요." error={shown("email")}>
         <input {...fieldProps("su-email", shown("email"))} {...bind("email")} type="email" autoComplete="email" maxLength={100} />
       </Field>
 

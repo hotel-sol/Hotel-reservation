@@ -119,7 +119,7 @@ function ProfileCard({ me, onSaved }: { me: Member; onSaved: (m: Member) => void
             <input {...fieldProps("me-phone")} type="tel" inputMode="numeric" value={form.phone ?? ""}
               onChange={(e) => setForm({ ...form, phone: formatPhone(e.target.value) })} maxLength={13} autoComplete="tel" />
           </Field>
-          <Field id="me-email" label="이메일" optional hint="비밀번호 찾기에 써요.">
+          <Field id="me-email" label="이메일" optional hint="예약 안내를 받을 때 써요.">
             <input {...fieldProps("me-email")} type="email" value={form.email ?? ""} onChange={set("email")} maxLength={100} autoComplete="email" />
           </Field>
           <div className="flex gap-2">

@@ -175,40 +175,34 @@ def test_withdraw_keeps_reservation_rows(client):
     client.cookies.clear()
     assert login(client).status_code == 401
     row = sql("SELECT login_id, name, phone, email, password FROM member")[0]
-    assert dict(row) == {"login_id": f"withdrawn_{me['memberId']}", "name": "탈퇴회원", "phone": None, "email": None,
+    assert dict(row) == {"login_id": f"withdrawn-{me['memberId']}", "name": "탈퇴회원", "phone": None, "email": None,
                          "password": "!"}
     assert sql("SELECT COUNT(*) AS n FROM reservation")[0]["n"] == 1  # 예약 기록은 남는다
     assert signup(client).status_code == 201  # 같은 아이디로 다시 가입 가능
 
 
-def test_password_reset_with_email(client):
-    signup(client, email="a@example.com")
-    signup(client, "no_mail")
-
-    def reset(**kw):
-        body = {"loginId": "guest01", "email": "a@example.com", "newPassword": "resetpass1", **kw}
-        return client.post("/api/members/password-reset", json=body)
-
-    assert reset(email="b@example.com").json()["detail"]["code"] == "NOT_MATCHED"
-    assert reset(loginId="no_mail", email="").json()["detail"]["code"] == "NOT_MATCHED"  # 이메일 없는 회원
-    assert reset(email="A@Example.com ").status_code == 204  # 대소문자 · 공백 무시
-    assert login(client, password="resetpass1").status_code == 200
-
-
-def test_password_reset_refuses_admin(client):
-    """이메일만 알면 관리자 계정을 가져갈 수 있던 문제(11-25): 관리자는 틀렸을 때와 같은 답으로 거절"""
-    create_admin.create_admin("boss01", "관리자", "adminpass1")
-    login(client, "boss01", "adminpass1")
-    assert client.put("/api/members/me", json={"name": "관리자", "email": "boss@example.com"}).status_code == 200
+def test_withdraw_works_even_if_someone_took_withdrawn_id(client):
+    """#67-4: 누가 withdrawn_N 아이디를 먼저 가입해 둬도 N번 회원 탈퇴가 500 나지 않는다."""
+    signup(client)
+    login(client)
+    me = client.get("/api/members/me").json()
     client.cookies.clear()
+    assert signup(client, f"withdrawn_{me['memberId']}").status_code == 201
+    assert signup(client, f"withdrawn-{me['memberId']}").status_code == 422  # "-" 는 가입 아이디에 못 쓴다
+    login(client)
+    assert client.post("/api/members/me/withdraw", json={"password": "password123"}).status_code == 204
 
-    r = client.post("/api/members/password-reset",
-                    json={"loginId": "boss01", "email": "boss@example.com", "newPassword": "stolenpass1"})
-    assert r.status_code == 400
-    assert r.json()["detail"]["code"] == "NOT_MATCHED"
-    assert r.json()["detail"]["message"] == "아이디와 가입한 이메일이 맞지 않습니다."  # 손님이 틀렸을 때와 같은 문구
-    assert login(client, "boss01", "stolenpass1").status_code == 401  # 비밀번호는 그대로
-    assert login(client, "boss01", "adminpass1").status_code == 200
+
+def test_password_reset_is_turned_off(client):
+    """#67-1: 아이디 + 이메일만으로 바꾸면 남이 계정(관리자 포함)을 빼앗을 수 있어 시연 전에는 끈다."""
+    signup(client, email="a@example.com")
+    create_admin.create_admin("boss01", "관리자", "adminpass1")
+    for login_id in ("guest01", "boss01"):
+        r = client.post("/api/members/password-reset",
+                        json={"loginId": login_id, "email": "a@example.com", "newPassword": "stolenpass1"})
+        assert r.status_code == 403 and r.json()["detail"]["code"] == "PASSWORD_RESET_DISABLED"
+    assert login(client, password="stolenpass1").status_code == 401  # 비밀번호는 그대로
+    assert login(client).status_code == 200
 
 
 def test_admin_cannot_withdraw_and_create_admin(client):
