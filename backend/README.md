@@ -31,7 +31,7 @@ uv run fastapi dev app/main.py --port 8000   # http://localhost:8000/docs
 uv run pytest                                # hotel_<이름>_test 스키마를 새로 만들어 테스트
 ```
 
-- DB 연결 확인: http://localhost:8000/api/health/db
+- DB 연결 확인: http://localhost:8000/api/health/db (`{"status": "ok"}`, DB 버전은 안 보여 줌 — #70)
 - 프론트(Next.js)는 `/api/*`를 이 서버로 넘깁니다. 같은 주소로 보여서 로그인 쿠키가 그대로 동작합니다.
 
 ## 구조

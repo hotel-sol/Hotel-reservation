@@ -13,5 +13,6 @@ def health():
 
 @router.get("/db")
 def health_db(db: DB):
-    version = db.execute(text("SELECT version()")).scalar_one()
-    return {"status": "ok", "db": version.splitlines()[0]}
+    """DB 연결 확인. 로그인 없이 부르는 주소라 DB 종류 · 버전은 알려 주지 않는다 (#70)."""
+    db.execute(text("SELECT 1"))
+    return {"status": "ok"}

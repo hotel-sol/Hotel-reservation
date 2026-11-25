@@ -1,11 +1,14 @@
 """환경 설정 — backend/.env 값을 읽어 온다."""
 import re
+import warnings
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 SHARED_SCHEMA = "hotel"  # 시연 · 통합 확인용 공용 스키마
+MIN_SECRET_LENGTH = 32  # 세션 서명 키 최소 길이 (#70)
+WEAK_SECRETS = {"", "change-me"}  # .env.example 기본값 등
 
 
 class Settings(BaseSettings):
@@ -50,6 +53,18 @@ class Settings(BaseSettings):
         if not re.fullmatch(r"[a-z_][a-z0-9_]{0,62}", v):
             raise ValueError("DB_SCHEMA 는 영문 소문자 · 숫자 · _ 만 쓸 수 있습니다.")
         return v
+
+    @model_validator(mode="after")
+    def session_secret_is_strong(self) -> "Settings":
+        """#70: 세션 서명 키가 예시 값(change-me)이거나 너무 짧으면 쿠키를 위조당할 수 있다.
+        시연 · 배포(APP_ENV 가 local 이 아님)는 서버 시작을 거부하고, 내 컴퓨터(local)는 경고만 한다."""
+        weak = self.session_secret in WEAK_SECRETS or len(self.session_secret) < MIN_SECRET_LENGTH
+        if weak and self.app_env != "local":
+            raise ValueError(f"SESSION_SECRET 이 약합니다. 예시 값이 아닌 {MIN_SECRET_LENGTH}자 이상 무작위 값을 쓰세요.")
+        if weak:
+            warnings.warn(f"SESSION_SECRET 이 약합니다(로컬이라 계속). 배포 전 {MIN_SECRET_LENGTH}자 이상 무작위 값으로 바꾸세요.",
+                          UserWarning, stacklevel=2)
+        return self
 
     @property
     def sqlalchemy_url(self) -> str:
