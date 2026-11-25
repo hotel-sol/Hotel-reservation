@@ -4,10 +4,11 @@
 - 관리자만 (AdminMember)
 - 지금은 객실 사진만: targetType = "ROOM", targetId = 객실 번호
 - jpg · png 만 (확장자와 파일 앞부분 모양을 둘 다 확인)
-- 객실당 최대 5장, 한 장 최대 5MB
-- 파일은 <UPLOAD_DIR>/rooms/<무작위이름>.<확장자> 에 저장,
-  DB(attach_file.saved_path)에는 "uploads/rooms/<무작위이름>.<확장자>" 로 기록
-  → main.py 가 /uploads 를 정적 파일로 내주고, Next.js 가 /uploads/* 를 백엔드로 넘겨서 화면에 보인다.
+- 객실당 최대 5장, 한 장 최대 5MB. 동시에 올려도 5장을 넘지 않게, 파일을 올린 뒤 객실 행을 잠깐 잠그고 다시 센다 (#69)
+- 파일 저장은 services/photo_storage.py (2-A2):
+  .env 에 Supabase Storage 설정이 있으면 공용 버킷에 올리고 saved_path = 공개 주소(https://...)
+  없으면 <UPLOAD_DIR>/rooms/ 에 저장하고 saved_path = "uploads/rooms/<무작위이름>.<확장자>"
+  → 화면(lib/format.ts fileUrl)은 https 주소는 그대로, 그 밖은 앞에 "/" 를 붙여 <img src> 로 쓴다.
 """
 import uuid
 from pathlib import Path
@@ -16,10 +17,10 @@ from fastapi import APIRouter, File, Form, Query, UploadFile
 from sqlalchemy import func, select
 
 from app.api.deps import DB, AdminMember
-from app.core.config import get_settings
 from app.core.exceptions import fail
 from app.models import AttachFile, Room
 from app.schemas.common import CamelModel
+from app.services import photo_storage
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -31,6 +32,7 @@ ALLOWED = {
     ".jpeg": b"\xff\xd8\xff",
     ".png": b"\x89PNG\r\n\x1a\n",
 }
+CONTENT_TYPES = {".jpg": "image/jpeg", ".png": "image/png"}
 
 
 class FileOut(CamelModel):
@@ -38,21 +40,26 @@ class FileOut(CamelModel):
     target_type: str
     target_id: int
     original_name: str
-    saved_path: str  # 화면은 앞에 "/" 를 붙여 그대로 <img src> 로 쓴다 (lib/format.ts fileUrl)
+    saved_path: str  # Storage 공개 주소(https://...) 또는 "uploads/rooms/..." (lib/format.ts fileUrl 로 <img src>)
     file_size: int
 
 
-def room_dir() -> Path:
-    path = Path(get_settings().upload_dir) / "rooms"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def ensure_room(db, target_type: str, target_id: int) -> None:
-    if target_type != "ROOM":
-        fail(400, "UNSUPPORTED_TARGET", "지금은 객실 사진(ROOM)만 올릴 수 있습니다.")
-    if not db.get(Room, target_id):
+def lock_room(db, target_id: int) -> None:
+    """객실이 있는지 확인하면서 그 행을 잠근다(SELECT … FOR UPDATE). commit 까지 같은 객실의 다른 업로드는
+    기다린다 → 다시 세기와 기록 사이에 끼어들 수 없다 (#69 사진 장수 경합). 파일 저장이 끝난 뒤에만 부른다."""
+    if db.scalar(select(Room.room_id).where(Room.room_id == target_id).with_for_update()) is None:
         fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
+
+
+def photo_count(db, target_type: str, target_id: int) -> int:
+    return db.scalar(
+        select(func.count()).select_from(AttachFile)
+        .where(AttachFile.target_type == target_type, AttachFile.target_id == target_id)
+    ) or 0
+
+
+def too_many() -> None:
+    fail(409, "TOO_MANY_FILES", f"객실 사진은 최대 {MAX_FILES_PER_ROOM}장까지 올릴 수 있습니다.")
 
 
 @router.post("", response_model=FileOut, status_code=201)
@@ -63,7 +70,8 @@ async def upload_file(
     target_id: int = Form(..., alias="targetId"),
     file: UploadFile = File(...),
 ):
-    ensure_room(db, target_type, target_id)
+    if target_type != "ROOM":
+        fail(400, "UNSUPPORTED_TARGET", "지금은 객실 사진(ROOM)만 올릴 수 있습니다.")
 
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED:
@@ -77,31 +85,37 @@ async def upload_file(
     if not data.startswith(ALLOWED[ext]):
         fail(400, "INVALID_FILE_TYPE", "jpg 또는 png 파일만 올릴 수 있습니다.")
 
-    count = db.scalar(
-        select(func.count()).select_from(AttachFile)
-        .where(AttachFile.target_type == target_type, AttachFile.target_id == target_id)
-    ) or 0
-    if count >= MAX_FILES_PER_ROOM:
-        fail(409, "TOO_MANY_FILES", f"객실 사진은 최대 {MAX_FILES_PER_ROOM}장까지 올릴 수 있습니다.")
+    # ① 잠그지 않고 미리 확인 — 없는 방이거나 이미 5장이면 올리지도 않는다
+    if not db.get(Room, target_id):
+        fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
+    if photo_count(db, target_type, target_id) >= MAX_FILES_PER_ROOM:
+        too_many()
+    db.rollback()  # DB 연결을 놓고 (풀이 작음) ② 로
 
-    name = f"{uuid.uuid4().hex}{'.jpg' if ext == '.jpeg' else ext}"
-    saved = room_dir() / name
-    saved.write_bytes(data)
+    # ② 파일 먼저 저장 — Storage 는 외부 HTTP 라 느릴 수 있어서 객실을 잠그지 않은 채로
+    ext = ".jpg" if ext == ".jpeg" else ext
+    name = f"{uuid.uuid4().hex}{ext}"
+    saved_path = photo_storage.save(name, data, CONTENT_TYPES[ext])
 
+    # ③ 객실 행을 잠깐 잠그고 다시 세고 기록 (#69). 잠금은 DB 작업 몇 ms 동안만 —
+    #    그 방 손님 예약 · 호텔 전체 휴무 지정이 업로드를 기다리지 않는다.
+    #    5장이 넘었거나 기록이 실패하면 방금 올린 파일을 지운다 (화면에 안 보이는 파일이 남지 않게)
     row = AttachFile(
         target_type=target_type,
         target_id=target_id,
         original_name=(file.filename or name)[:255],
-        saved_path=f"uploads/rooms/{name}",
+        saved_path=saved_path,
         file_size=len(data),
     )
     try:
+        lock_room(db, target_id)
+        if photo_count(db, target_type, target_id) >= MAX_FILES_PER_ROOM:
+            too_many()  # 그사이 다른 업로드가 5장을 채움
         db.add(row)
         db.commit()
     except Exception:
-        # DB 기록이 실패하면 방금 저장한 파일도 지운다 (화면에 안 보이는 파일이 디스크에 남지 않게)
         db.rollback()
-        saved.unlink(missing_ok=True)
+        photo_storage.remove(saved_path)
         raise
     db.refresh(row)
     return row
@@ -125,6 +139,8 @@ def list_files(
 @router.delete("/{file_id}", status_code=204)
 def delete_file(file_id: int, admin: AdminMember, db: DB):
     row = db.get(AttachFile, file_id) or fail(404, "FILE_NOT_FOUND", "파일을 찾을 수 없습니다.")
-    (room_dir() / Path(row.saved_path).name).unlink(missing_ok=True)
+    saved_path = row.saved_path
+    # DB 기록을 먼저 지우고, 성공하면 파일을 지운다 (반대 순서면 DB 실패 때 목록엔 있는데 사진이 깨짐)
     db.delete(row)
     db.commit()
+    photo_storage.remove(saved_path)

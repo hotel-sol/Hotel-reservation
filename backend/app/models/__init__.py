@@ -6,5 +6,6 @@ from app.models.member import Member
 from app.models.menu import Menu
 from app.models.reservation import Reservation
 from app.models.room import Room
+from app.models.room_grade import RoomGrade
 
-__all__ = ["AttachFile", "ClosedDate", "Closure", "Member", "Menu", "Reservation", "Room"]
+__all__ = ["AttachFile", "ClosedDate", "Closure", "Member", "Menu", "Reservation", "Room", "RoomGrade"]
