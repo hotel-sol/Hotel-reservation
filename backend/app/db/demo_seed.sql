@@ -19,7 +19,8 @@ INSERT INTO menu (parent_id, menu_name, menu_url, role, sort_order) VALUES
   (NULL, '예약 일자 관리', '/admin/closed-dates', 'ADMIN', 2),
   (NULL, '예약 관리', '/admin/reservations', 'ADMIN', 3),
   (NULL, '객실 추천', '/rooms', 'USER', 1),
-  (NULL, '내 예약', '/reservation/list', 'USER', 2);
+  (NULL, '내 예약', '/reservation/list', 'USER', 2),
+  (NULL, '마이페이지', '/mypage', 'USER', 3);  -- 1번 요청(11-25): 헤더에 마이페이지 링크
 
 INSERT INTO room (room_name, room_type, max_guest, price, description, view_count, is_active) VALUES
   ('1601호', '로얄 스위트', 6, 4400000, '16층 · 리버뷰 · 킹1 + 퀸2 · 200㎡ · 조식 · 라운지 포함. 두 개의 침실과 독립 거실을 갖춘 200㎡ 최상위 스위트. 최대 6명, 조식·라운지 포함', 165, 'Y'),
