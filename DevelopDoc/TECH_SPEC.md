@@ -1,6 +1,6 @@
 # TECH_SPEC — 태양의 호텔 기술 명세
 
-- 기준: dev `251bf9c`, 2026-11-25 (Step 3 반영). 이전 판: [docs/archive/2026-11-25_step2/DevelopDoc/TECH_SPEC.md](../docs/archive/2026-11-25_step2/DevelopDoc/TECH_SPEC.md)
+- 기준: dev `ee4a061`, 2026-11-25 (Step 3 · 점검 반영, PR #94까지). 직전 판: [docs/archive/2026-11-25_step3/DevelopDoc/TECH_SPEC.md](../docs/archive/2026-11-25_step3/DevelopDoc/TECH_SPEC.md) · 그 전 판: [docs/archive/2026-11-25_step2/DevelopDoc/TECH_SPEC.md](../docs/archive/2026-11-25_step2/DevelopDoc/TECH_SPEC.md)
 - 구조 그림(전체 구조 · ERD · 예약 흐름 · 상태 · 휴무 지정 · 로그인): [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)
 - API 입력 · 출력 전체: 백엔드를 켜고 http://localhost:8000/docs
 
@@ -75,7 +75,7 @@ Hotel-reservation/
 |---|---|
 | 비밀번호 저장 | scrypt 해시 |
 | 가입 입력 | 아이디 영문 · 숫자 · `_` 4~20자, 비밀번호 8~64자 |
-| 로그인 유지 | 서명한 세션 쿠키(회원 번호 + 비밀번호 표식, 8시간), HttpOnly · SameSite=Lax, 로컬이 아니면 Secure(HTTPS 필요) |
+| 로그인 유지 | 서명한 세션 쿠키(회원 번호 + 비밀번호 표식, 8시간), HttpOnly · SameSite=Lax, 로컬이 아니면 Secure(HTTPS 필요). `APP_ENV`가 `local`이 아니면 `SESSION_SECRET`이 `change-me` · 32자 미만일 때 서버가 시작하지 않음(#70, local은 경고만) |
 | 비밀번호 변경 | 다른 기기 로그인은 끊기고 지금 기기는 유지(쿠키의 비밀번호 표식이 달라짐) |
 | 잘못된 비밀번호 | 10분 안에 5번 틀리면 10분 잠금(429). 기록은 `login_attempt` 테이블. 로그인에 성공한 적 있는 기기(서명한 `hotel_device` 쿠키)는 따로 세서 남이 일부러 잠가도 주인은 들어올 수 있음 |
 | 비밀번호 찾기 | 시연 전까지 꺼 둠(403 `PASSWORD_RESET_DISABLED`). 이메일만 알면 남의 계정을 바꿀 수 있었기 때문 |
@@ -87,7 +87,7 @@ Hotel-reservation/
 
 | 파트 | 메서드 · 주소 (`/api` 생략) | 설명 |
 |---|---|---|
-| 공통 | `GET health`, `GET health/db` | 서버 · DB 연결 확인 |
+| 공통 | `GET health`, `GET health/db` | 서버 · DB 연결 확인 (`{"status":"ok"}`만, DB 버전은 안 보여 줌 — #70) |
 | 1 | `POST members/signup · login · logout`, `GET PUT members/me`, `PUT members/me/password`, `POST members/me/withdraw` | 회원 |
 | 1 | `POST members/password-reset` | 지금은 항상 403 (꺼 둠) |
 | 1 | `GET rooms/recommend?checkIn&checkOut&guests&sort&page&size` | 추천. `sort` = `recommend` · `popular` · `price`, 뱃지 `BEST` · `HOT` · `NEW` |
@@ -113,7 +113,7 @@ Hotel-reservation/
 | `ROOM_NOT_AVAILABLE` | 409 | 예약 기간에 다른 예약(대기 · 승인)이 있음. DB 이중 예약 제약 위반(23P01)도 이 코드 |
 | `TOO_MANY_PENDING` | 409 | 그 회원의 승인 대기 예약(체크아웃 전)이 이미 3건 |
 | `PAST_DATE` · `INVALID_DATES` | 400 | 지난 체크인 날짜 · 체크아웃이 체크인보다 빠르거나 같음 |
-| `TOO_LONG_STAY` · `TOO_FAR_DATE` | 400 | 30박 초과 · 체크인이 오늘부터 365일 뒤 |
+| `TOO_LONG_STAY` · `TOO_FAR_DATE` | 400 | 30박 초과 · 체크인이 오늘부터 365일 뒤 (예약 · 견적 · 추천 검색 공통) |
 | `TOO_MANY_GUESTS` | 400 | 인원이 객실 최대 인원보다 많음 |
 | `ALREADY_CLOSED` | 409 | 이미 휴무(호텔 전체 휴무일에 객실 휴무를 넣는 경우 포함) |
 | `CLOSED_DATE_CONFLICT` | 409 | 휴무로 지정하려는 날에 묵는 예약이 있음. 기간 지정이면 `detail.blockedDates`에 막힌 날짜 전부 |
@@ -133,7 +133,7 @@ Hotel-reservation/
 
 | 무엇 | 명령 | 기준 |
 |---|---|---|
-| 백엔드 테스트 | `backend`에서 `uv run pytest` | 전부 통과 (11-25 dev `8a1aa42` 기준 195개) |
+| 백엔드 테스트 | `backend`에서 `uv run pytest` | 전부 통과 (11-25 dev `ee4a061` 기준 198개) |
 | 화면 타입 · 규칙 | `frontend`에서 `npx tsc --noEmit`, `npm run lint` | 오류 0 |
 | 화면 빌드 | `frontend`에서 `npm run build` | 통과 (Next 16 `cacheComponents`: `useSearchParams` 등은 Suspense 안) |
 
@@ -144,4 +144,4 @@ PR 전에 위 세 가지를 돌립니다. 테스트에서 DB 행은 `tests/helpe
 - 브랜치: `main`(제출 · 시연) · `dev`(통합, 기본 브랜치) · `feature/<파트>-<내용>`. 기능 PR은 dev로, main은 dev에서 온 PR만. 자세한 규칙은 [README](../README.md)의 브랜치 규칙.
 - 팀 규칙 R1~R8은 GitHub Discussion #60 (DB 파일은 DB 담당이 고침, 테스트 데이터는 `tests/helpers.py`로만 등).
 - 보호 규칙(ruleset)은 11-23에 해제했고 지금은 약속으로 지킵니다.
-- 시연 배포: **미정**. 정할 것 — 배포 담당 · 주소, HTTPS(로그인 쿠키가 Secure), `BACKEND_URL` · `APP_ENV`. 관리 화면에서 올린 사진은 `SUPABASE_URL` · `SUPABASE_SECRET_KEY`를 넣으면 Storage 버킷 `room-photos`(`<DB_SCHEMA>/rooms/` 아래)에, 없으면 백엔드 PC의 `backend/uploads/`에 저장됩니다.
+- 시연 배포: **미정**. 정할 것 — 배포 담당 · 주소, HTTPS(로그인 쿠키가 Secure), `BACKEND_URL` · `APP_ENV=production` · 32자 이상 무작위 `SESSION_SECRET`(`python -c "import secrets; print(secrets.token_hex(32))"`). 실제 화면 테스트 목록: [RELEASE_TEST](RELEASE_TEST.md). 관리 화면에서 올린 사진은 `SUPABASE_URL` · `SUPABASE_SECRET_KEY`를 넣으면 Storage 버킷 `room-photos`(`<DB_SCHEMA>/rooms/` 아래)에, 없으면 백엔드 PC의 `backend/uploads/`에 저장됩니다.

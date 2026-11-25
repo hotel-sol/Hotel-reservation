@@ -1,6 +1,6 @@
 # PRD — 태양의 호텔 (호텔 예약 시스템)
 
-- 기준: dev `251bf9c`, 2026-11-25 (Step 3 반영). 이전 판: [docs/archive/2026-11-25_step2/DevelopDoc/PRD.md](../docs/archive/2026-11-25_step2/DevelopDoc/PRD.md)
+- 기준: dev `ee4a061`, 2026-11-25 (Step 3 · 점검 반영, PR #94까지). 직전 판: [docs/archive/2026-11-25_step3/DevelopDoc/PRD.md](../docs/archive/2026-11-25_step3/DevelopDoc/PRD.md) · 그 전 판: [docs/archive/2026-11-25_step2/DevelopDoc/PRD.md](../docs/archive/2026-11-25_step2/DevelopDoc/PRD.md)
 - 해커톤: 3기 바이브코딩 해커톤(11-19 ~ 11-26), 5인 팀
 - 관련 문서: [TECH_SPEC](TECH_SPEC.md) · [WORK_UNITS](WORK_UNITS.md) · [FINAL_CHECKLIST](FINAL_CHECKLIST.md) · [시스템 구조 그림](../docs/ARCHITECTURE.md)
 
@@ -47,7 +47,7 @@
 |---|---|
 | 예약이 차지하는 날 | 체크인 ≤ 날짜 < 체크아웃. **체크아웃 날은 다음 손님이 체크인할 수 있다** |
 | 살아 있는 예약 | 대기(`PENDING`) · 승인(`APPROVED`). 취소(`CANCELED`)는 객실을 잡지 않는다. 같은 방 날짜 겹침은 DB 제약(`EXCLUDE`)도 막는다 |
-| 예약 범위 | 한 번에 최대 30박, 체크인은 오늘부터 365일 안, 회원 한 명의 승인 대기 예약 최대 3건 |
+| 예약 범위 | 한 번에 최대 30박, 체크인은 오늘부터 365일 안(추천 검색 · 객실 상세도 같은 제한, #77), 회원 한 명의 승인 대기 예약 최대 3건 |
 | 예약 상태 | 대기 → 승인 / 취소, 승인 → 취소. 취소는 관리자만, 되돌릴 수 없다. 체크인이 지난 예약: 승인 예약은 취소 불가, 대기 예약은 승인 불가 · 취소만 |
 | 휴무 | `room_id`가 비면 호텔 전체 휴무, 있으면 그 객실만. 그날 묵는 예약이 있으면 지정 불가. 한 번 지정(하루든 기간이든) = 휴무 묶음(`closure`) 1개, 사유는 묶음에 |
 | 휴무와 추천 · 예약 | 숙박 기간에 휴무가 하루라도 끼면 추천에서 빠지고 예약은 409 |

@@ -3,7 +3,7 @@
 - 제출 마감: **11-26(목) 10:00** (11-25 수요일 종료 전 초안). 발표 11-26 14:30.
 - 기능 동결: 11-25(수) 오후 → `dev` → `main` PR 한 번.
 - 체크는 확인한 사람이 하고, 옆에 날짜를 적습니다. (11-24 기준으로 확인된 것만 체크, 11-25 Step 3 반영분은 날짜 표시)
-- 기준: dev `251bf9c`, 2026-11-25 (Step 3 반영). 이전 판: [docs/archive/2026-11-25_step2/DevelopDoc/FINAL_CHECKLIST.md](../docs/archive/2026-11-25_step2/DevelopDoc/FINAL_CHECKLIST.md)
+- 기준: dev `ee4a061`, 2026-11-25 (Step 3 · 점검 반영, PR #94까지). 직전 판: [docs/archive/2026-11-25_step3/DevelopDoc/FINAL_CHECKLIST.md](../docs/archive/2026-11-25_step3/DevelopDoc/FINAL_CHECKLIST.md) · 그 전 판: [docs/archive/2026-11-25_step2/DevelopDoc/FINAL_CHECKLIST.md](../docs/archive/2026-11-25_step2/DevelopDoc/FINAL_CHECKLIST.md)
 
 ## 1. 제출물
 
@@ -26,9 +26,11 @@
 - [ ] 관리자 객실 관리: 추가 · 수정 · 비활성 · 사진 올리기, 요약 카드 숫자
 - [ ] 예약 달력에서 막힌 날짜 비활성 (이슈 #27, 4번)
 
+- [ ] 실제 화면 테스트 한 바퀴: [RELEASE_TEST](RELEASE_TEST.md) (공용 `hotel`)
+
 ## 3. 품질
 
-- [x] `backend`: `uv run pytest` 전부 통과 (11-25, dev `8a1aa42`, 195개. 11-24에는 77개)
+- [x] `backend`: `uv run pytest` 전부 통과 (11-25, dev `ee4a061`, 198개. 11-24에는 77개)
 - [x] `frontend`: `npx tsc --noEmit` · `npm run lint` 오류 0 (11-24)
 - [ ] `frontend`: `npm run build` 통과 — **main PR 직전 다시 확인**
 - [ ] 브라우저 콘솔 · 서버 로그에 오류 없음 (시연 시나리오 한 바퀴)
@@ -51,6 +53,8 @@
 - [x] 비밀번호 찾기는 시연 전까지 꺼 둠 — API 403, 화면은 안내만 (11-25, 보안 #67)
 - [x] 이중 예약은 DB 제약(`EXCLUDE`)으로도 막음, 승인 대기 예약은 회원당 최대 3건 (11-25)
 - [ ] 배포하면 HTTPS (로그인 쿠키가 Secure)
+- [ ] 배포 서버 `APP_ENV=production` + 32자 이상 무작위 `SESSION_SECRET` (아니면 서버가 안 켜짐, #70)
+- [x] `health/db`가 DB 버전을 보여 주지 않음 (#70, PR #94)
 - [ ] 해커톤 끝나면 DB 비밀번호와 `admin01` 비밀번호 교체 (대화 · 노션 기록에 노출된 적 있음)
 
 ## 6. 저장소 정리
