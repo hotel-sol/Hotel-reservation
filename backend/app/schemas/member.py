@@ -43,6 +43,6 @@ class MemberOut(CamelModel):
     member_id: int
     login_id: str
     name: str
-    phone: str | None
+    phone: str
     email: str | None
     role: str

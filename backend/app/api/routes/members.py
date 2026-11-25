@@ -252,7 +252,7 @@ def withdraw(body: WithdrawRequest, response: Response, member: CurrentMember, d
     # "-" 는 가입 아이디에 못 쓰는 기호라 누가 먼저 가입해 둘 수 없다(#67-4: withdrawn_N 선점 → 탈퇴 500)
     member.login_id = f"withdrawn-{member.member_id}"
     member.password = "!"  # 어떤 비밀번호로도 로그인 불가
-    member.name, member.phone, member.email = "탈퇴회원", None, None
+    member.name, member.phone, member.email = "탈퇴회원", "", None  # phone 은 NOT NULL 이라 빈 문자열로 지움
     db.commit()
     response.delete_cookie(get_settings().session_cookie)
 
