@@ -135,3 +135,73 @@ def test_summary_hotel_wide_closure_soon(client):
 def test_admin_only(client):
     assert client.get("/api/admin/rooms/summary").status_code == 401
     assert client.get("/api/admin/rooms/summary", headers=GUEST).status_code == 403
+
+
+# ---------- 2-A1 등급 · 전망 · 침대 ----------
+
+def grades(client):
+    r = client.get("/api/room-grades")  # 로그인 없이 읽기
+    assert r.status_code == 200, r.text
+    return {g["gradeCode"]: g for g in r.json()}
+
+
+def test_room_grades_list(client):
+    r = client.get("/api/room-grades")
+    assert [g["gradeCode"] for g in r.json()] == ["S", "A", "B", "C"]  # sort_order 순
+    c = grades(client)["C"]
+    assert (c["gradeName"], c["basePrice"], c["maxGuest"], c["areaM2"]) == ("디럭스", 550000, 2, 40)
+
+
+def test_create_room_with_grade_sets_room_type(client):
+    deluxe = grades(client)["C"]
+    body = {"roomName": "0777호", "roomType": "아무 글자", "maxGuest": 2, "price": 605000,
+            "gradeId": deluxe["gradeId"], "viewType": "RIVER", "bedType": "트윈"}
+    r = client.post("/api/admin/rooms", json=body, headers=ADMIN)
+    assert r.status_code == 201, r.text
+    room = r.json()
+    assert room["roomType"] == "디럭스"  # 등급 이름으로 맞춤 (1 · 4 · 5번이 읽는 글자)
+    assert (room["gradeId"], room["viewType"], room["bedType"]) == (deluxe["gradeId"], "RIVER", "트윈")
+
+
+def test_create_room_without_grade_still_works(client):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0778호"), headers=ADMIN)
+    assert r.status_code == 201, r.text
+    assert (r.json()["roomType"], r.json()["gradeId"], r.json()["viewType"]) == ("STANDARD", None, None)
+
+
+def test_unknown_grade_rejected(client):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0779호", gradeId=99999), headers=ADMIN)
+    assert r.status_code == 400
+    assert r.json()["detail"]["code"] == "GRADE_NOT_FOUND"
+
+
+def test_unknown_view_rejected(client):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0779호", viewType="OCEAN"), headers=ADMIN)
+    assert r.status_code == 422
+
+
+def test_future_reservation_blocks_grade_change(client):
+    reserve(1, TODAY + timedelta(days=10))
+    r = put(client, room1(gradeId=grades(client)["C"]["gradeId"]))  # STANDARD → 디럭스
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "FUTURE_RESERVATION_EXISTS"
+
+
+def test_future_reservation_allows_view_and_bed_change(client):
+    reserve(1, TODAY + timedelta(days=10))
+    r = put(client, room1(viewType="CITY", bedType="킹"))  # 요금 · 인원 · 종류 그대로
+    assert r.status_code == 200, r.text
+    assert (r.json()["viewType"], r.json()["bedType"]) == ("CITY", "킹")
+
+
+# ---------- #69 요금 · 인원 상한 ----------
+
+@pytest.mark.parametrize("change", [{"price": 10_000_001}, {"maxGuest": 21}, {"price": 3_000_000_000}])
+def test_price_and_guest_upper_limits(client, change):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0780호", **change), headers=ADMIN)
+    assert r.status_code == 422  # 500 이 아니라 입력 오류
+
+
+def test_limits_themselves_allowed(client):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0781호", price=10_000_000, maxGuest=20), headers=ADMIN)
+    assert r.status_code == 201, r.text
