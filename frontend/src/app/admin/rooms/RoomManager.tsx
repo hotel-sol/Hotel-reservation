@@ -17,6 +17,9 @@ const VIEWS: { value: ViewType; label: string; rate: number }[] = [
   { value: "MOUNTAIN", label: "마운틴뷰", rate: 1 },
 ];
 const BEDS = ["킹", "퀸", "트윈", "킹1 + 퀸2"]; // 침대 칸 고르기 목록 (직접 적어도 됨)
+// 입력 상한 (#69, 백엔드 schemas/room.py 와 같음) — 30박 총액이 DB INT 한도를 넘지 않게
+const MAX_PRICE = 10_000_000;
+const MAX_GUEST = 20;
 const viewOf = (v: ViewType | null | undefined) => VIEWS.find((x) => x.value === v);
 // 등급 기준가 × 전망 배율. 전망을 아직 안 골랐으면 기준가
 const autoPrice = (g: RoomGrade, view: ViewType | null) => Math.round(g.basePrice * (viewOf(view)?.rate ?? 1));
@@ -262,7 +265,7 @@ export default function RoomManager() {
           </Field>
           <Field label="최대 인원" required hint={grade && `${grade.gradeName} 최대 ${grade.maxGuest}명`}>
             <Unit unit="명">
-              <input className="input min-w-0 flex-1" type="number" min={1} required value={f.maxGuest || ""} onChange={(e) => setF({ maxGuest: Number(e.target.value) })} />
+              <input className="input min-w-0 flex-1" type="number" min={1} max={MAX_GUEST} required value={f.maxGuest || ""} onChange={(e) => setF({ maxGuest: Number(e.target.value) })} />
             </Unit>
           </Field>
           <Field
@@ -283,7 +286,7 @@ export default function RoomManager() {
             }
           >
             <Unit unit="원">
-              <input className="input min-w-0 flex-1" type="number" min={1} required value={f.price || ""} onChange={(e) => setF({ price: Number(e.target.value) })} />
+              <input className="input min-w-0 flex-1" type="number" min={1} max={MAX_PRICE} required value={f.price || ""} onChange={(e) => setF({ price: Number(e.target.value) })} />
             </Unit>
           </Field>
           <Field

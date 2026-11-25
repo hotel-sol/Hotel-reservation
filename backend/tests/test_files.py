@@ -13,6 +13,12 @@ ADMIN_PW = "admin-test-pw"
 
 
 @pytest.fixture(autouse=True)
+def local_storage(monkeypatch):
+    """테스트는 항상 내 컴퓨터(upload_dir)에 저장 — .env 에 Storage 키가 있어도 진짜 버킷에 올리지 않게."""
+    monkeypatch.setattr(get_settings(), "supabase_secret_key", "")
+
+
+@pytest.fixture(autouse=True)
 def cleanup_uploads():
     """테스트가 만든 사진 파일은 끝나면 지운다 (내 uploads/ 폴더를 어지르지 않게)."""
     from pathlib import Path
@@ -131,3 +137,103 @@ def test_guest_and_anonymous_blocked(client, seeded_db):
     assert r.status_code in (200, 201), r.text
     client.post("/api/members/login", json={"loginId": "guest_up", "password": "guest1234"})
     assert upload(client).status_code == 403
+
+
+# ---------- 2-A2 사진 공용 저장소 (Supabase Storage) — 진짜 버킷 대신 가짜 호출로 확인 ----------
+
+@pytest.fixture
+def fake_storage(monkeypatch):
+    """Storage 설정을 켜고, 바깥으로 나가는 호출(_call)은 기록만 한다."""
+    from app.services import photo_storage
+
+    s = get_settings()
+    monkeypatch.setattr(s, "supabase_url", "https://example.supabase.co")
+    monkeypatch.setattr(s, "supabase_secret_key", "sb_secret_test")
+    calls = []
+    monkeypatch.setattr(photo_storage, "_call", lambda method, url, data, ctype: calls.append((method, url, data, ctype)))
+    return calls
+
+
+def test_storage_upload_saves_public_url(admin, fake_storage):
+    r = upload(admin)
+    assert r.status_code == 201, r.text
+    path = r.json()["savedPath"]
+    folder = f"{get_settings().db_schema}/rooms/"  # 스키마별 폴더
+    prefix = "https://example.supabase.co/storage/v1/object/public/room-photos/"
+    assert path.startswith(prefix + folder) and path.endswith(".jpg")
+    object_path = path[len(prefix):]
+    assert fake_storage == [("POST", "https://example.supabase.co/storage/v1/object/room-photos/" + object_path, JPG, "image/jpeg")]
+    # 추천 카드 대표 사진도 그 주소
+    thumbs = {i["roomId"]: i["thumbnailUrl"] for i in admin.get("/api/rooms/recommend").json()["items"]}
+    assert thumbs[1] == path
+
+
+def test_storage_delete_removes_object(admin, fake_storage):
+    import json
+
+    f = upload(admin).json()
+    assert admin.delete(f"/api/files/{f['fileId']}").status_code == 204
+    method, url, data, _ = fake_storage[-1]
+    object_path = f["savedPath"].split("/public/room-photos/")[1]
+    assert (method, url) == ("DELETE", "https://example.supabase.co/storage/v1/object/room-photos")
+    assert json.loads(data) == {"prefixes": [object_path]}
+
+
+def test_storage_failure_returns_502_without_row(admin, monkeypatch, fake_storage):
+    import urllib.error
+
+    from app.services import photo_storage
+
+    def down(*args):
+        raise urllib.error.URLError("저장소 연결 안 됨 흉내")
+
+    monkeypatch.setattr(photo_storage, "_call", down)
+    r = upload(admin)
+    assert r.status_code == 502
+    assert r.json()["detail"]["code"] == "STORAGE_FAILED"
+    assert admin.get("/api/files", params={"targetType": "ROOM", "targetId": 1}).json() == []
+
+
+def test_demo_photo_delete_keeps_public_file(admin, fake_storage):
+    """시연용 사진(room-photos/..., frontend/public)은 행만 지우고 파일 · 버킷은 건드리지 않는다."""
+    with engine.begin() as c:
+        fid = c.execute(text(
+            "INSERT INTO attach_file (target_type, target_id, original_name, saved_path, file_size)"
+            " VALUES ('ROOM', 1, 'd.jpg', 'room-photos/deluxe/deluxe_01.jpg', 10) RETURNING file_id")).scalar()
+    assert admin.delete(f"/api/files/{fid}").status_code == 204
+    assert fake_storage == []
+
+
+def test_concurrent_uploads_never_exceed_five(admin, monkeypatch):
+    """#69: 4장 있는 방에 두 장을 동시에 올려도 5장까지만 (객실 행 잠금)."""
+    import threading
+    import time
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.services import photo_storage
+
+    for _ in range(4):
+        assert upload(admin).status_code == 201
+    real_save = photo_storage.save
+    first_saving = threading.Event()
+
+    def slow_save(*args):
+        first_saving.set()  # 첫 요청이 "5장 안 넘음" 확인 뒤 저장 중
+        time.sleep(1.5)  # 그동안 두 번째 요청이 들어온다
+        return real_save(*args)
+
+    monkeypatch.setattr(photo_storage, "save", slow_save)
+    other = TestClient(app)
+    other.cookies.update(admin.cookies)
+    codes = []
+    first = threading.Thread(target=lambda: codes.append(upload(admin).status_code))
+    second = threading.Thread(target=lambda: codes.append(upload(other).status_code))
+    first.start()
+    assert first_saving.wait(10)
+    second.start()  # 잠금이 없으면 이 요청도 4장으로 세고 저장해서 6장이 된다
+    first.join()
+    second.join()
+    assert sorted(codes) == [201, 409]
+    assert len(admin.get("/api/files", params={"targetType": "ROOM", "targetId": 1}).json()) == 5

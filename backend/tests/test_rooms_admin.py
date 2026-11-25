@@ -192,3 +192,16 @@ def test_future_reservation_allows_view_and_bed_change(client):
     r = put(client, room1(viewType="CITY", bedType="킹"))  # 요금 · 인원 · 종류 그대로
     assert r.status_code == 200, r.text
     assert (r.json()["viewType"], r.json()["bedType"]) == ("CITY", "킹")
+
+
+# ---------- #69 요금 · 인원 상한 ----------
+
+@pytest.mark.parametrize("change", [{"price": 10_000_001}, {"maxGuest": 21}, {"price": 3_000_000_000}])
+def test_price_and_guest_upper_limits(client, change):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0780호", **change), headers=ADMIN)
+    assert r.status_code == 422  # 500 이 아니라 입력 오류
+
+
+def test_limits_themselves_allowed(client):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0781호", price=10_000_000, maxGuest=20), headers=ADMIN)
+    assert r.status_code == 201, r.text

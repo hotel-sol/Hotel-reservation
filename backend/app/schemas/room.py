@@ -56,8 +56,10 @@ class RoomDetailOut(RecommendRoomOut):
 class RoomCreate(CamelModel):
     room_name: str = Field(min_length=1, max_length=100)
     room_type: str = Field(min_length=1, max_length=50)
-    max_guest: int = Field(ge=1)
-    price: int = Field(gt=0)
+    # 상한 (#69): 요금이 너무 크면 30박 총액이 reservation.total_price(INT) 한도를 넘어 예약 저장이 500,
+    # 2^31 이상이면 객실 저장 자체가 500. 가장 비싼 로얄 스위트 성수기 리버뷰도 5,720,000원 · 최대 6명
+    max_guest: int = Field(ge=1, le=20)
+    price: int = Field(gt=0, le=10_000_000)
     description: str | None = Field(default=None, max_length=1000)
     # 2-A1: 등급을 주면 서버가 room_type 을 등급 이름으로 맞춘다. 안 주면 예전처럼 room_type 글자 그대로
     grade_id: int | None = None

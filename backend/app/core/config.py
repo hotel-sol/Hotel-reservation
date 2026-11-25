@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     upload_dir: str = "uploads"
 
+    # 2-A2 객실 사진 공용 저장소 (Supabase Storage). 주소 · 키가 둘 다 있을 때만 쓰고, 비어 있으면 upload_dir 에 저장
+    supabase_url: str = ""  # https://<프로젝트>.supabase.co
+    supabase_secret_key: str = ""  # Project Settings → API Keys → Secret keys (커밋 금지)
+    storage_bucket: str = "room-photos"  # 누구나 읽기만 가능한(public) 버킷
+
+    @property
+    def storage_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_secret_key)
+
     @field_validator("db_schema")
     @classmethod
     def schema_is_identifier(cls, v: str) -> str:
