@@ -18,7 +18,7 @@ ADMIN = {"Cookie": f"{COOKIE}={create_session_token(1, SEED_PASSWORD)}"}
 GUEST = {"Cookie": f"{COOKIE}={create_session_token(2, SEED_PASSWORD)}"}
 API = "/api/admin/closed-dates"
 TODAY = today_kst()
-# 시드(2026-12 예약)와 겹치지 않고, 예약 가능 범위(오늘부터 365일, reservation_service.BOOKING_WINDOW_DAYS) 안인 미래 날짜
+# 시드(2026-12 예약)와 겹치지 않는 미래 날짜 (예약 · 추천을 거치는 테스트는 "오늘"을 고정해 30일 예약 가능 범위에 넣는다)
 D1 = max(TODAY + timedelta(days=30), date(2027, 1, 4))
 
 
@@ -120,8 +120,11 @@ def reserve(client, room_id, check_in, nights=1):
     return client.post("/api/reservations", json=body, headers=GUEST)
 
 
-def test_closed_dates_block_recommend_and_reservation(client):
+def test_closed_dates_block_recommend_and_reservation(client, monkeypatch):
     """3C: 휴무가 객실 추천 · 예약에서 실제로 막히는지 (다른 파트가 같이 쓰는 available_room_filter)."""
+    # 예약 가능 범위(오늘부터 30일) 안에 D1 이 들어오게, 추천 · 예약 확인이 보는 '오늘'을 D1 사흘 전으로 고정
+    for target in ("app.services.reservation_service.today_kst", "app.api.routes.rooms.today_kst"):
+        monkeypatch.setattr(target, lambda: D1 - timedelta(days=3))
     all_rooms = recommended_ids(client, D1)
     assert {1, 2} <= all_rooms
 

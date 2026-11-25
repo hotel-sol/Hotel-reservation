@@ -21,8 +21,8 @@ const REASON_LABEL = { PAST: "지난 날", CLOSED: "휴무", BOOKED: "예약됨"
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** 백엔드 reservation_service 의 MAX_NIGHTS · BOOKING_WINDOW_DAYS 와 같은 값 (바꾸면 둘 다) */
-export const MAX_NIGHTS = 30;
-const BOOKING_WINDOW_DAYS = 365;
+export const MAX_NIGHTS = 6;
+const BOOKING_WINDOW_DAYS = 30;
 
 /** "2026-12-31" + 1 → "2027-01-01" (UTC 로 계산해서 시간대 영향 없음) */
 export function addDays(date: string, n: number): string {

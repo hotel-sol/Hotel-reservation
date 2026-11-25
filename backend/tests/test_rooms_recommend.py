@@ -13,7 +13,7 @@ pytestmark = pytest.mark.usefixtures("empty_db")
 
 API = "/api/rooms/recommend"
 TODAY = today_kst()
-FUTURE = TODAY + timedelta(days=300)  # 예약 가능 범위(365일) 안
+FUTURE = TODAY + timedelta(days=10)  # 예약 가능 범위(오늘부터 30일, reservation_service.BOOKING_WINDOW_DAYS) 안
 
 
 def run(sql, **params):

@@ -14,8 +14,8 @@ from app.models.reservation import PENDING
 
 # 한 번에 예약할 수 있는 범위 (팀 협의 후 조정). 화면 달력(StayCalendar.tsx 의 MAX_NIGHTS)도 같은 값.
 # 상한이 없으면 수십 년짜리 예약으로 방을 막거나, 총액이 DB INT 한도를 넘어 저장이 실패한다.
-MAX_NIGHTS = 30
-BOOKING_WINDOW_DAYS = 365  # 체크인은 오늘부터 이 날수 안
+MAX_NIGHTS = 6
+BOOKING_WINDOW_DAYS = 30  # 체크인은 오늘부터 이 날수 안
 # 회원 한 명이 동시에 가질 수 있는 승인 대기 예약 수 (#68). 대기 예약도 방을 잡으므로,
 # 상한이 없으면 계정 하나로 모든 방의 날짜를 막을 수 있다.
 MAX_PENDING_PER_MEMBER = 3

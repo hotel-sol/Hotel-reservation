@@ -57,7 +57,7 @@ app/
 ├── services/               비즈니스 로직
 │   ├── room_service.py         추천 점수 · 뱃지 · 객실 상세
 │   ├── availability_service.py 예약 달력 · 막힌 이유(지난 날 · 휴무 · 예약)
-│   ├── reservation_service.py  예약 확인(30박 · 365일 · 대기 3건) · 요금 계산 한 곳
+│   ├── reservation_service.py  예약 확인(6박 · 30일 · 대기 3건) · 요금 계산 한 곳
 │   └── photo_storage.py        사진 저장 (Supabase Storage 또는 uploads/)
 └── api/
     ├── deps.py             DB, CurrentMember, AdminMember 의존성
