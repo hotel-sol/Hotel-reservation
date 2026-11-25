@@ -16,6 +16,7 @@ for r in (
     files.router,
     admin_rooms.router,
     admin_closed_dates.router,
+    admin_closed_dates.closures_router,
     admin_reservations.router,
 ):
     api_router.include_router(r)
