@@ -13,7 +13,7 @@ pytestmark = pytest.mark.usefixtures("empty_db")
 
 API = "/api/rooms/recommend"
 TODAY = today_kst()
-FUTURE = TODAY + timedelta(days=400)
+FUTURE = TODAY + timedelta(days=300)  # 예약 가능 범위(365일) 안
 
 
 def run(sql, **params):
@@ -227,6 +227,21 @@ def test_six_per_page(client):
 def test_bad_dates_are_400(client, query):
     r = client.get(API, params=query)
     assert r.status_code == 400 and r.json()["detail"]["code"] == "INVALID_DATES"
+
+
+def test_stay_range_follows_reservation_rule(client):
+    """#77: 예약과 같은 제한 — 최대 MAX_NIGHTS 박, 체크인은 오늘부터 BOOKING_WINDOW_DAYS 일 안"""
+    from app.services.reservation_service import BOOKING_WINDOW_DAYS, MAX_NIGHTS
+
+    room("A")
+    assert names(get(client, **stay(TODAY, MAX_NIGHTS))) == ["A"]
+    assert names(get(client, **stay(TODAY + timedelta(days=BOOKING_WINDOW_DAYS), 1))) == ["A"]
+    for query, code in [
+        (stay(TODAY, MAX_NIGHTS + 1), "TOO_LONG_STAY"),
+        (stay(TODAY + timedelta(days=BOOKING_WINDOW_DAYS + 1), 1), "TOO_FAR_DATE"),
+    ]:
+        r = client.get(API, params=query)
+        assert r.status_code == 400 and r.json()["detail"]["code"] == code, r.text
 
 
 def test_today_check_in_is_allowed(client):

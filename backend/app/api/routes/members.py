@@ -51,9 +51,6 @@ PHONE_RE = re.compile(r"^[0-9-]{9,20}$")
 # 시간은 DB 시계(LOCALTIMESTAMP) 하나로만 비교해서 서버 · DB 시간대가 달라도 맞는다.
 _RECENT = "attempt_key = :k AND failed_at >= LOCALTIMESTAMP - make_interval(secs => :s)"
 
-# 옛 메모리 잠금 이름. tests/conftest.py(DB 담당 파일, 규칙 R1)가 아직 비우고 있어서 빈 채로 남겨 둔다.
-_fails: dict[str, list[float]] = {}
-
 
 def check_not_locked(db: Session, key: str) -> None:
     """같은 key 로 동시에 여러 번 보내도 5번을 넘지 않게, 이 key 의 시도를 한 줄로 세운다.

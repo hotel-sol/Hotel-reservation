@@ -97,9 +97,7 @@ def test_login_locks_after_five_failures(client):
         assert login(client, password="wrong-pass").status_code == 401
     assert login(client).status_code == 429  # 맞는 비밀번호여도 잠김
     assert login(client, "GUEST01").status_code == 429  # 대소문자만 바꿔도 같은 잠금
-    from app.api.routes import members
-    members._fails.clear()  # 옛 메모리 기록을 비워도(= 서버 재시작) 잠금은 DB에 남아 있다
-    assert login(client).status_code == 429
+    assert login(client).status_code == 429  # 잠금은 DB(login_attempt)에 있어 서버를 다시 켜도 남는다
     sql("UPDATE login_attempt SET failed_at = failed_at - INTERVAL '11 minutes'")  # 10분 지난 것으로 치고
     assert login(client).status_code == 200
     assert sql("SELECT COUNT(*) AS n FROM login_attempt")[0]["n"] == 0  # 성공하면 기록을 지운다

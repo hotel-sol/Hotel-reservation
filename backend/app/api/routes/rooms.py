@@ -1,5 +1,5 @@
 """객실 (손님) — ROOM-001 객실 추천, RSV-001 객실 정보"""
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Query
 from sqlalchemy import text, update
@@ -15,7 +15,14 @@ from app.schemas.room import RecommendRoomOut, RoomOut, RoomSort
 from app.services.room_service import recommend_rooms
 from app.schemas.reservation import AvailableDatesOut, QuoteOut
 from app.services.availability_service import month_range, room_calendar
-from app.services.reservation_service import check_stay, get_bookable_room, night_price, total_price
+from app.services.reservation_service import (
+    BOOKING_WINDOW_DAYS,
+    MAX_NIGHTS,
+    check_stay,
+    get_bookable_room,
+    night_price,
+    total_price,
+)
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -36,6 +43,11 @@ def recommend(
         fail(400, "INVALID_DATES", "지난 날짜는 선택할 수 없습니다.")
     if check_in and check_out and check_out <= check_in:
         fail(400, "INVALID_DATES", "체크아웃은 체크인 다음 날부터 선택할 수 있습니다.")
+    # #77: 예약(4번 reservation_service)과 같은 기간 제한 · 같은 오류 코드. 숫자는 그쪽 상수를 그대로 쓴다
+    if check_in and check_in > today_kst() + timedelta(days=BOOKING_WINDOW_DAYS):
+        fail(400, "TOO_FAR_DATE", f"체크인은 오늘부터 {BOOKING_WINDOW_DAYS}일 안의 날짜만 예약할 수 있습니다.")
+    if check_in and check_out and (check_out - check_in).days > MAX_NIGHTS:
+        fail(400, "TOO_LONG_STAY", f"한 번에 최대 {MAX_NIGHTS}박까지 예약할 수 있습니다.")
     items, total = recommend_rooms(
         db, check_in=check_in, check_out=check_out, guests=guests, sort=sort, page=page, size=size
     )

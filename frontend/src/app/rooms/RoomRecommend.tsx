@@ -8,6 +8,7 @@ import RoomCard from "@/components/RoomCard";
 import { ApiError } from "@/lib/api/client";
 import { roomsApi } from "@/lib/api/rooms";
 import { nightsBetween, today } from "@/lib/format";
+import { addDays, lastCheckIn, MAX_NIGHTS, stayRangeError } from "./stayRange";
 import type { Page, RecommendRoom, RoomSort } from "@/types/api";
 
 const SORTS: { value: RoomSort; label: string }[] = [
@@ -25,6 +26,10 @@ function checkForm(f: { checkIn: string; checkOut: string; guests: number }) {
     return { field: f.checkIn ? "checkOut" : "checkIn", message: "체크인과 체크아웃을 함께 골라 주세요." };
   }
   if (f.checkIn && f.checkOut <= f.checkIn) return { field: "checkOut", message: "체크아웃은 체크인 다음 날부터 선택할 수 있어요." };
+  if (f.checkIn) {
+    const range = stayRangeError(f.checkIn, f.checkOut); // #77 예약과 같은 기간 제한
+    if (range) return range;
+  }
   if (!(f.guests >= 1 && f.guests <= MAX_GUESTS)) return { field: "guests", message: `인원은 1~${MAX_GUESTS}명이에요.` };
   return null;
 }
@@ -37,7 +42,8 @@ export default function RoomRecommend() {
     checkOut: params.get("checkOut") ?? "",
     guests: Number(params.get("guests")) || 2,
   }));
-  const [search, setSearch] = useState(form);
+  // 주소로 받은 날짜가 규칙에 안 맞으면(지난 날짜 · 40박 등) 날짜 없이 보여 주고, 위 칸에 빨간 안내가 뜬다
+  const [search, setSearch] = useState(() => (checkForm(form) ? { ...form, checkIn: "", checkOut: "" } : form));
   const [sort, setSort] = useState<RoomSort>("recommend");
   const [page, setPage] = useState(1);
   const [data, setData] = useState<Page<RecommendRoom> | null>(null);
@@ -106,12 +112,12 @@ export default function RoomRecommend() {
       >
         <label className="text-sm">
           체크인
-          <input type="date" className={`input mt-1 ${bad("checkIn")}`} min={today()} value={form.checkIn}
+          <input type="date" className={`input mt-1 ${bad("checkIn")}`} min={today()} max={lastCheckIn()} value={form.checkIn}
             onChange={(e) => setForm({ ...form, checkIn: e.target.value })} />
         </label>
         <label className="text-sm">
           체크아웃
-          <input type="date" className={`input mt-1 ${bad("checkOut")}`} min={form.checkIn || today()} value={form.checkOut}
+          <input type="date" className={`input mt-1 ${bad("checkOut")}`} min={form.checkIn || today()} max={form.checkIn ? addDays(form.checkIn, MAX_NIGHTS) : undefined} value={form.checkOut}
             onChange={(e) => setForm({ ...form, checkOut: e.target.value })} />
         </label>
         <label className="text-sm">
