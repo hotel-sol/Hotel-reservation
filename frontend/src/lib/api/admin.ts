@@ -1,17 +1,23 @@
 import type {
   AttachFile,
   ClosedDate,
+  Closure,
+  ClosureReasonCode,
   Page,
   Reservation,
   ReservationCounts,
   ReservationStatus,
   ReservationStatusCounts,
   Room,
+  RoomGrade,
   RoomSummary,
 } from "@/types/api";
 import { api } from "./client";
 
-export type RoomInput = Pick<Room, "roomName" | "roomType" | "maxGuest" | "price" | "description">;
+export type RoomInput = Pick<
+  Room,
+  "roomName" | "roomType" | "maxGuest" | "price" | "description" | "gradeId" | "viewType" | "bedType"
+>;
 
 export const adminApi = {
   // ADM-001 객실 관리
@@ -23,6 +29,7 @@ export const adminApi = {
     api<Room>(`/admin/rooms/${roomId}/status`, { method: "PATCH", json: { isActive } }),
   // 목록 위 요약 카드 (전체 · 판매 중 · 오늘 휴무 · 휴무 예정 · 비활성)
   roomSummary: () => api<RoomSummary>("/admin/rooms/summary"),
+  roomGrades: () => api<RoomGrade[]>("/room-grades"), // 2-A1 등급 4개 (로그인 없이 읽기)
   // 객실 사진 (jpg·png, 객실당 최대 5장. 첫 장이 추천 카드 대표 사진)
   roomPhotos: (roomId: number) => api<AttachFile[]>("/files", { query: { targetType: "ROOM", targetId: roomId } }),
   uploadRoomPhoto: (roomId: number, file: File) => {
@@ -41,10 +48,13 @@ export const adminApi = {
   // 날짜별 남은 객실 수(사용 중 객실 − 휴무 − 숙박 중). 전체 객실 달력용
   availableRooms: (month: string) => api<Record<string, number>>("/admin/closed-dates/available-rooms", { query: { month } }),
   // 409 ALREADY_CLOSED · 409 CLOSED_DATE_CONFLICT(그날 예약 있음). 지난 날짜도 가능
-  createClosedDate: (body: { roomId: number | null; closedDate: string; reason: string }) =>
+  // reasonCode 가 ETC(기타)면 reason(상세) 필수, 아니면 선택
+  createClosedDate: (body: { roomId: number | null; closedDate: string; reasonCode: ClosureReasonCode; reason: string }) =>
     api<ClosedDate>("/admin/closed-dates", { method: "POST", json: body }),
   // 기간 지정(최대 31일). 하루라도 막히면 전부 거부 — 400 RANGE_TOO_LONG · 409 는 위와 같음
-  createClosedDateRange: (body: { roomId: number | null; startDate: string; endDate: string; reason: string }) =>
+  createClosedDateRange: (body: {
+    roomId: number | null; startDate: string; endDate: string; reasonCode: ClosureReasonCode; reason: string;
+  }) =>
     api<ClosedDate[]>("/admin/closed-dates/range", { method: "POST", json: body }),
   // 기간 해제: 같은 범위(roomId 없음 = 호텔 전체, 있음 = 그 방)에 직접 지정된 휴무만. 없으면 404
   deleteClosedDateRange: (q: { startDate: string; endDate: string; roomId: number | null }) =>
@@ -52,6 +62,9 @@ export const adminApi = {
       method: "DELETE", query: { startDate: q.startDate, endDate: q.endDate, roomId: q.roomId ?? undefined },
     }),
   deleteClosedDate: (id: number) => api<void>(`/admin/closed-dates/${id}`, { method: "DELETE" }),
+  // 휴무 묶음 (3-A1): 그달에 걸친 묶음 목록 · 묶음 해제(남은 날짜 모두)
+  closures: (month: string, roomId?: number) => api<Closure[]>("/admin/closures", { query: { month, roomId } }),
+  deleteClosure: (id: number) => api<{ deleted: number }>(`/admin/closures/${id}`, { method: "DELETE" }),
 
   // ADM-003 예약 관리
   reservations: (query: { status?: ReservationStatus | ""; from?: string; to?: string; keyword?: string; page?: number }) =>

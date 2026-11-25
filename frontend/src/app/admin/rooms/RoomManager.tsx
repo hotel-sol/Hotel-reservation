@@ -5,21 +5,28 @@ import Pagination from "@/components/Pagination";
 import { adminApi, type RoomInput } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/client";
 import { won } from "@/lib/format";
-import type { Page, Room, RoomSummary } from "@/types/api";
+import type { Page, Room, RoomGrade, RoomSummary, ViewType } from "@/types/api";
 import RoomPhotos from "./RoomPhotos";
 
-// 객실 등급: 객실 상품 검토안 v1.9 요금표(비수기 · 시티·마운틴뷰 기준가)와 시연 데이터 40실의 값.
-// 화면에서 고르기만 하고, 백엔드는 지금처럼 자유 글자로 받는다(예전 STANDARD 등도 그대로 수정 가능).
-// bed · area · extra · intro 는 [예시 넣기] 설명용 (검토안 등급사양 · 시연 데이터 설명과 같은 문장)
-const GRADES = [
-  { name: "디럭스", price: 550_000, maxGuest: 2, bed: "퀸", area: 40, extra: "", intro: "리버·시티·마운틴 전망의 40㎡ 기본 객실. 퀸 또는 트윈" },
-  { name: "프리미어", price: 700_000, maxGuest: 3, bed: "킹", area: 55, extra: "", intro: "휴식 공간을 갖춘 55㎡ 상위 객실. 킹 또는 트윈" },
-  { name: "이그제큐티브 스위트", price: 1_200_000, maxGuest: 3, bed: "킹", area: 80, extra: "조식 · 라운지 포함", intro: "독립 거실이 있는 80㎡ 1베드룸 스위트. 조식·라운지 포함" },
-  { name: "로얄 스위트", price: 4_000_000, maxGuest: 6, bed: "킹1 + 퀸2", area: 200, extra: "조식 · 라운지 포함", intro: "두 개의 침실과 독립 거실을 갖춘 200㎡ 최상위 스위트. 최대 6명, 조식·라운지 포함" },
+// 객실 등급은 DB 등급표(room_grade, GET /api/room-grades)에서 읽는다 (2-A1).
+// 등급을 고르면 서버가 객실 종류(roomType)를 등급 이름으로 맞춘다. 예전 객실(STANDARD 등, 등급 없음)도 그대로 수정 가능.
+// 전망 배율: 리버뷰 +10% (요금 = 등급 기준가 × 배율)
+const VIEWS: { value: ViewType; label: string; rate: number }[] = [
+  { value: "RIVER", label: "리버뷰", rate: 1.1 },
+  { value: "CITY", label: "시티뷰", rate: 1 },
+  { value: "MOUNTAIN", label: "마운틴뷰", rate: 1 },
 ];
-const RIVER_VIEW_RATE = 1.1; // 리버뷰 +10%
+const BEDS = ["킹", "퀸", "트윈", "킹1 + 퀸2"]; // 침대 칸 고르기 목록 (직접 적어도 됨)
+// 입력 상한 (#69, 백엔드 schemas/room.py 와 같음) — 30박 총액이 DB INT 한도를 넘지 않게
+const MAX_PRICE = 10_000_000;
+const MAX_GUEST = 20;
+const viewOf = (v: ViewType | null | undefined) => VIEWS.find((x) => x.value === v);
+// 등급 기준가 × 전망 배율. 전망을 아직 안 골랐으면 기준가
+const autoPrice = (g: RoomGrade, view: ViewType | null) => Math.round(g.basePrice * (viewOf(view)?.rate ?? 1));
 
-const EMPTY: RoomInput = { roomName: "", roomType: "", maxGuest: 0, price: 0, description: "" };
+const EMPTY: RoomInput = {
+  roomName: "", roomType: "", maxGuest: 0, price: 0, description: "", gradeId: null, viewType: null, bedType: null,
+};
 
 // 객실명 = 호실 번호(층 2자리 + 위치 2자리) + "호" (객실 상품 검토안 OP-15). 칸에는 숫자 3~4자리만 적는다.
 // 703 → 0703호, 1601 → 1601호. 이미 저장된 이름(101호 · 오션뷰 등)은 칸을 건드리지 않으면 그대로 둔다.
@@ -27,11 +34,12 @@ const ROOM_NO = /^\d{3,4}$/;
 const toRoomName = (no: string) => `${no.padStart(4, "0")}호`;
 const roomNoOf = (name: string) => name.match(/^(\d{3,4})호$/)?.[1] ?? "";
 
-// [예시 넣기]: "12층 · (전망) · 킹 · 55㎡. 등급 소개" — 층은 호실 번호 앞 두 자리, 전망은 방마다 달라 직접 고친다
+// 설명 예시: "12층 · 리버뷰 · 킹 · 55㎡. 등급 소개" — 층은 호실 번호 앞 두 자리, 전망 · 침대는 고른 값 (전망을 안 골랐으면 "(전망)")
 const VIEW_SLOT = "(전망)";
-function descTemplate(g: (typeof GRADES)[number], roomNo: string) {
+function descTemplate(g: RoomGrade, roomNo: string, view: ViewType | null, bed: string | null) {
   const floor = ROOM_NO.test(roomNo) ? `${Number(roomNo.padStart(4, "0").slice(0, 2))}층` : "(층)";
-  return [floor, VIEW_SLOT, g.bed, `${g.area}㎡`, g.extra].filter(Boolean).join(" · ") + `. ${g.intro}`;
+  const head = [floor, viewOf(view)?.label ?? VIEW_SLOT, bed?.trim() || g.bedType, `${g.areaM2}㎡`].filter(Boolean).join(" · ");
+  return g.intro ? `${head}. ${g.intro}` : head;
 }
 
 type Editing = { id: number | null; form: RoomInput; roomNo: string };
@@ -45,6 +53,19 @@ export default function RoomManager() {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [photoRoom, setPhotoRoom] = useState<Room | null>(null); // 사진 관리 중인 객실
   const [error, setError] = useState("");
+  const [listError, setListError] = useState(""); // 목록의 비활성화 · 활성화 버튼 실패 안내 (#76-5)
+  const [saving, setSaving] = useState(false); // 저장 중 버튼 잠금 — 두 번 눌러 같은 객실이 두 번 저장되지 않게 (#76-4)
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [grades, setGrades] = useState<RoomGrade[]>([]);
+
+  // 등급 4개: 한 번만 불러온다
+  useEffect(() => {
+    let ignore = false;
+    adminApi.roomGrades()
+      .then((g) => { if (!ignore) setGrades(g); })
+      .catch((e: ApiError) => { if (!ignore) setError(e.message); });
+    return () => { ignore = true; };
+  }, []);
 
   // 저장·승인 뒤 다시 불러올 때 reloadKey 를 올린다
   const [reloadKey, setReloadKey] = useState(0);
@@ -69,13 +90,18 @@ export default function RoomManager() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!editing) return;
+    if (!editing || saving) return;
     setError("");
     if (nameChanged && !ROOM_NO.test(editing.roomNo)) {
       setError("객실명은 숫자 3~4자리로 적어 주세요. (예: 703 → 0703호)");
       return;
     }
-    const body = { ...editing.form, roomName: nameChanged ? toRoomName(editing.roomNo) : editing.form.roomName };
+    const body = {
+      ...editing.form,
+      roomName: nameChanged ? toRoomName(editing.roomNo) : editing.form.roomName,
+      bedType: editing.form.bedType?.trim() || null,
+    };
+    setSaving(true);
     try {
       if (editing.id) await adminApi.updateRoom(editing.id, body);
       else setPhotoRoom(await adminApi.createRoom(body)); // 새 객실은 바로 사진을 올릴 수 있게 사진 창을 연다
@@ -83,14 +109,26 @@ export default function RoomManager() {
       load();
     } catch (err) {
       setError((err as ApiError).message);
+    } finally {
+      setSaving(false);
     }
   }
 
   async function toggle(room: Room) {
+    if (togglingId !== null) return;
     const next = room.isActive === "Y" ? "N" : "Y";
     if (next === "N" && !confirm(`${room.roomName} 객실을 비활성화할까요?`)) return;
-    await adminApi.setRoomActive(room.roomId, next);
-    load();
+    setListError("");
+    setTogglingId(room.roomId);
+    try {
+      await adminApi.setRoomActive(room.roomId, next);
+      load();
+    } catch (err) {
+      // 예: 앞으로 묵을 예약이 있으면 서버가 409 + "예약을 먼저 취소해 주세요" (#76-3)
+      setListError(`${room.roomName}: ${(err as ApiError).message}`);
+    } finally {
+      setTogglingId(null);
+    }
   }
 
   const f = editing?.form;
@@ -100,40 +138,66 @@ export default function RoomManager() {
   const startEdit = (r?: Room) => {
     setError("");
     setEditing(r
-      ? { id: r.roomId, roomNo: roomNoOf(r.roomName), form: { roomName: r.roomName, roomType: r.roomType, maxGuest: r.maxGuest, price: r.price, description: r.description } }
+      ? {
+          id: r.roomId,
+          roomNo: roomNoOf(r.roomName),
+          form: {
+            roomName: r.roomName, roomType: r.roomType, maxGuest: r.maxGuest, price: r.price, description: r.description,
+            gradeId: r.gradeId, viewType: r.viewType, bedType: r.bedType,
+          },
+        }
       : { id: null, roomNo: "", form: EMPTY });
   };
-  const grade = GRADES.find((g) => g.name === f?.roomType);
-  const riverPrice = grade && Math.round(grade.price * RIVER_VIEW_RATE);
-  // 설명이 아직 자동으로 채운 예시 그대로인지 (직접 고쳤으면 false → 덮어쓰지 않는다)
-  const isAutoDesc = (roomNo: string) => !!grade && f?.description === descTemplate(grade, roomNo);
+  const gradeOf = (id: number | null | undefined) => grades.find((g) => g.gradeId === id);
+  const grade = gradeOf(f?.gradeId);
+  const gradePrice = grade && f ? autoPrice(grade, f.viewType) : 0;
 
-  // 등급을 고르면 기준 요금 · 최대 인원, 그리고 설명이 비었거나 자동 예시 그대로면 설명까지 채운다
-  function pickGrade(name: string) {
+  // 등급 · 전망 · 침대 · 호실 번호가 바뀔 때 쓰는 공통 함수.
+  // 요금 · 설명이 "자동으로 채운 값 그대로"(또는 비어 있음)일 때만 새 값으로 다시 채운다 — 직접 고친 값은 덮어쓰지 않는다
+  function change(patch: Partial<RoomInput>, roomNo = editing?.roomNo ?? "") {
     if (!editing) return;
-    const g = GRADES.find((x) => x.name === name);
-    if (!g) return setF({ roomType: name });
-    const fillDesc = !editing.form.description?.trim() || isAutoDesc(editing.roomNo);
-    setF({ roomType: g.name, price: g.price, maxGuest: g.maxGuest, ...(fillDesc ? { description: descTemplate(g, editing.roomNo) } : {}) });
+    const before = editing.form;
+    const next = { ...before, ...patch };
+    const gBefore = gradeOf(before.gradeId);
+    const gNext = gradeOf(next.gradeId);
+    if (gNext) {
+      const priceWasAuto = !before.price || (!!gBefore && before.price === autoPrice(gBefore, before.viewType));
+      // 요금 자동 계산은 새 객실 등록 때만 (준엽님 점검): 수정에서 전망만 바꿨는데 요금이 같이 바뀌면
+      // 예약이 있는 방은 서버가 요금 변경으로 보고 409. 수정 때 요금을 바꾸려면 "등급 · 전망 기준" 버튼을 누른다
+      if (!("price" in patch) && priceWasAuto && editing.id === null) next.price = autoPrice(gNext, next.viewType);
+      const descWasAuto = !before.description?.trim()
+        || (!!gBefore && before.description === descTemplate(gBefore, editing.roomNo, before.viewType, before.bedType));
+      if (descWasAuto) next.description = descTemplate(gNext, roomNo, next.viewType, next.bedType);
+    }
+    setEditing({ ...editing, roomNo, form: next });
+  }
+
+  // 등급을 고르면 종류 · 최대 인원 · 요금(기준가 × 전망)을 채우고, 침대가 비었거나 예전 등급 기본값이면 새 등급 기본 침대로
+  function pickGrade(value: string) {
+    if (!editing) return;
+    const g = gradeOf(Number(value));
+    if (!g) return change({ gradeId: null, roomType: "" });
+    const bed = editing.form.bedType?.trim();
+    const bedWasDefault = !bed || bed === gradeOf(editing.form.gradeId)?.bedType;
+    change({
+      gradeId: g.gradeId, roomType: g.gradeName, maxGuest: g.maxGuest, price: autoPrice(g, editing.form.viewType),
+      ...(bedWasDefault ? { bedType: g.bedType } : {}),
+    });
   }
 
   // 호실 번호를 바꾸면, 설명이 자동 예시 그대로일 때 층도 따라 바꾼다 (905 → 9층)
-  function changeRoomNo(value: string) {
-    if (!editing) return;
-    const roomNo = value.replace(/\D/g, "").slice(0, 4);
-    const form = grade && isAutoDesc(editing.roomNo) ? { ...editing.form, description: descTemplate(grade, roomNo) } : editing.form;
-    setEditing({ ...editing, roomNo, form });
-  }
+  const changeRoomNo = (value: string) => change({}, value.replace(/\D/g, "").slice(0, 4));
 
-  // 설명 칸에 등급 예시를 진짜 글자로 채우고, "(전망)" 을 골라 둬서 바로 덮어쓸 수 있게 한다
+  // 설명 칸에 예시를 진짜 글자로 채운다. 전망을 아직 안 골랐으면 "(전망)" 을 골라 둬서 바로 덮어쓸 수 있게
   const descRef = useRef<HTMLTextAreaElement>(null);
   function fillDescription() {
-    if (!editing || !grade) return;
-    if (f?.description?.trim() && !confirm("설명을 예시로 바꿀까요? 지금 적힌 내용은 지워져요.")) return;
-    const text = descTemplate(grade, editing.roomNo);
+    if (!editing || !grade || !f) return;
+    if (f.description?.trim() && !confirm("설명을 예시로 바꿀까요? 지금 적힌 내용은 지워져요.")) return;
+    const text = descTemplate(grade, editing.roomNo, f.viewType, f.bedType);
     setF({ description: text });
+    const at = text.indexOf(VIEW_SLOT);
+    if (at < 0) return;
     requestAnimationFrame(() => {
-      const at = text.indexOf(VIEW_SLOT);
       descRef.current?.focus();
       descRef.current?.setSelectionRange(at, at + VIEW_SLOT.length);
     });
@@ -185,16 +249,41 @@ export default function RoomManager() {
               />
             </Unit>
           </Field>
-          <Field label="객실 종류" required hint={grade ? undefined : "등급을 고르면 기준 요금과 최대 인원이 채워져요"}>
-            <select className="input" required value={f.roomType} onChange={(e) => pickGrade(e.target.value)}>
+          <Field
+            label="객실 종류 (등급)"
+            required
+            hint={grade ? `${grade.areaM2}㎡ · 기준가 ${won(grade.basePrice)}` : "등급을 고르면 요금 · 최대 인원 · 침대 · 설명이 채워져요"}
+          >
+            <select
+              className="input" required
+              value={f.gradeId ? String(f.gradeId) : f.roomType ? "legacy" : ""}
+              onChange={(e) => e.target.value !== "legacy" && pickGrade(e.target.value)}
+            >
               <option value="">등급을 고르세요</option>
-              {GRADES.map((g) => <option key={g.name} value={g.name}>{g.name}</option>)}
-              {f.roomType && !grade && <option value={f.roomType}>{f.roomType} (예전 종류)</option>}
+              {grades.map((g) => <option key={g.gradeId} value={g.gradeId}>{g.gradeName}</option>)}
+              {!f.gradeId && f.roomType && <option value="legacy">{f.roomType} (예전 종류)</option>}
             </select>
           </Field>
-          <Field label="최대 인원" required hint={grade && `${grade.name} 기준 ${grade.maxGuest}명`}>
+          <Field label="전망" hint={grade ? "리버뷰는 요금 +10%" : undefined}>
+            <select
+              className="input"
+              value={f.viewType ?? ""}
+              onChange={(e) => change({ viewType: (e.target.value || null) as ViewType | null })}
+            >
+              <option value="">전망을 고르세요</option>
+              {VIEWS.map((v) => <option key={v.value} value={v.value}>{v.label}{v.rate > 1 ? " (+10%)" : ""}</option>)}
+            </select>
+          </Field>
+          <Field label="침대" hint={grade?.bedType ? `${grade.gradeName} 기본: ${grade.bedType}` : "목록에서 고르거나 직접 적어요"}>
+            <input
+              className="input" list="bed-types" maxLength={30} placeholder="예: 킹, 트윈"
+              value={f.bedType ?? ""} onChange={(e) => change({ bedType: e.target.value })}
+            />
+            <datalist id="bed-types">{BEDS.map((b) => <option key={b} value={b} />)}</datalist>
+          </Field>
+          <Field label="최대 인원" required hint={grade && `${grade.gradeName} 최대 ${grade.maxGuest}명`}>
             <Unit unit="명">
-              <input className="input min-w-0 flex-1" type="number" min={1} required value={f.maxGuest || ""} onChange={(e) => setF({ maxGuest: Number(e.target.value) })} />
+              <input className="input min-w-0 flex-1" type="number" min={1} max={MAX_GUEST} required value={f.maxGuest || ""} onChange={(e) => setF({ maxGuest: Number(e.target.value) })} />
             </Unit>
           </Field>
           <Field
@@ -203,19 +292,19 @@ export default function RoomManager() {
             hint={
               <>
                 {f.price > 0 && <b className="text-slate-700">{won(f.price)}</b>}
-                {grade && riverPrice && (
+                {grade && (
                   <>
-                    {" "}· 눌러서 넣기:{" "}
-                    <PriceButton active={f.price === grade.price} onClick={() => setF({ price: grade.price })}>기준 {won(grade.price)}</PriceButton>
-                    {" · "}
-                    <PriceButton active={f.price === riverPrice} onClick={() => setF({ price: riverPrice })}>리버뷰 {won(riverPrice)}</PriceButton>
+                    {" "}· 등급 · 전망 기준:{" "}
+                    <PriceButton active={f.price === gradePrice} onClick={() => setF({ price: gradePrice })}>
+                      {won(gradePrice)}{f.viewType ? ` (${viewOf(f.viewType)?.label})` : ""}
+                    </PriceButton>
                   </>
                 )}
               </>
             }
           >
             <Unit unit="원">
-              <input className="input min-w-0 flex-1" type="number" min={1} required value={f.price || ""} onChange={(e) => setF({ price: Number(e.target.value) })} />
+              <input className="input min-w-0 flex-1" type="number" min={1} max={MAX_PRICE} required value={f.price || ""} onChange={(e) => setF({ price: Number(e.target.value) })} />
             </Unit>
           </Field>
           <Field
@@ -223,8 +312,8 @@ export default function RoomManager() {
             className="sm:col-span-2"
             hint={
               <>
-                {grade && <button type="button" className="btn-outline mr-2 px-2 py-0.5 text-xs" onClick={fillDescription}>{grade.name} 예시 다시 넣기</button>}
-                {f.description?.includes(VIEW_SLOT) && <b className="text-amber-700">{VIEW_SLOT} 자리를 리버뷰 · 시티뷰 · 마운틴뷰로 고쳐 주세요. </b>}
+                {grade && <button type="button" className="btn-outline mr-2 px-2 py-0.5 text-xs" onClick={fillDescription}>{grade.gradeName} 예시 다시 넣기</button>}
+                {f.description?.includes(VIEW_SLOT) && <b className="text-amber-700">전망을 고르면 {VIEW_SLOT} 자리가 채워져요. </b>}
                 손님 추천 카드에 앞 2줄이 보여요. (선택, 최대 1000자)
               </>
             }
@@ -235,7 +324,7 @@ export default function RoomManager() {
             <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 sm:col-span-2">{error}</p>
           )}
           <div className="flex gap-2 sm:col-span-2">
-            <button className="btn-primary">{editing.id ? "수정" : "등록"}</button>
+            <button className="btn-primary" disabled={saving}>{saving ? "저장 중…" : editing.id ? "수정" : "등록"}</button>
             <button type="button" className="btn-outline" onClick={() => { setEditing(null); setError(""); }}>취소</button>
           </div>
         </form>
@@ -243,14 +332,22 @@ export default function RoomManager() {
 
       {photoRoom && <RoomPhotos key={photoRoom.roomId} room={photoRoom} onClose={() => setPhotoRoom(null)} />}
 
+      {listError && (
+        <p role="alert" className="flex items-start gap-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          <span className="flex-1">{listError}</span>
+          <button type="button" className="text-red-500" aria-label="안내 닫기" onClick={() => setListError("")}>✕</button>
+        </p>
+      )}
+
       <table className="w-full overflow-hidden rounded-xl bg-white text-sm shadow-sm">
         <thead className="bg-slate-100 text-left text-slate-600">
-          <tr><th className="p-3">번호</th><th>객실명</th><th>종류</th><th>인원</th><th>요금</th><th>조회수</th><th>상태</th><th></th></tr>
+          <tr><th className="p-3">번호</th><th>객실명</th><th>종류</th><th>전망</th><th>인원</th><th>요금</th><th>조회수</th><th>상태</th><th></th></tr>
         </thead>
         <tbody>
           {data?.items.map((r) => (
             <tr key={r.roomId} className="border-t border-slate-100">
-              <td className="p-3">{r.roomId}</td><td>{r.roomName}</td><td>{r.roomType}</td><td>{r.maxGuest}</td>
+              <td className="p-3">{r.roomId}</td><td>{r.roomName}</td><td>{r.roomType}</td>
+              <td>{viewOf(r.viewType)?.label ?? <span className="text-slate-400">-</span>}</td><td>{r.maxGuest}</td>
               <td>{won(r.price)}</td><td>{r.viewCount}</td>
               <td>
                 {r.isActive === "Y" ? "사용" : <span className="text-slate-400">비활성</span>}
@@ -260,7 +357,7 @@ export default function RoomManager() {
               <td className="space-x-1 pr-3 text-right">
                 <button className="btn-outline px-2 py-1" onClick={() => startEdit(r)}>수정</button>
                 <button className="btn-outline px-2 py-1" onClick={() => setPhotoRoom(r)}>사진</button>
-                <button className="btn-outline px-2 py-1" onClick={() => toggle(r)}>{r.isActive === "Y" ? "비활성화" : "활성화"}</button>
+                <button className="btn-outline px-2 py-1" disabled={togglingId === r.roomId} onClick={() => toggle(r)}>{r.isActive === "Y" ? "비활성화" : "활성화"}</button>
               </td>
             </tr>
           ))}

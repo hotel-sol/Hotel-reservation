@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import StatusBadge from "@/components/StatusBadge";
 import { ApiError } from "@/lib/api/client";
 import { reservationsApi } from "@/lib/api/reservations";
-import { won } from "@/lib/format";
+import PriceDetail from "../PriceDetail";
 import type { Reservation } from "@/types/api";
 
 export default function MyReservations() {
@@ -31,7 +31,7 @@ export default function MyReservations() {
             <p className="text-slate-500">{r.checkInDate} ~ {r.checkOutDate} · {r.guestCount}명</p>
           </div>
           <div className="flex items-center gap-3">
-            <span>{won(r.totalPrice)}</span>
+            <PriceDetail r={r} />
             <StatusBadge status={r.status} />
           </div>
         </div>

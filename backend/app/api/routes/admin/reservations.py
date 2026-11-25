@@ -1,7 +1,10 @@
 """관리자) 예약 관리 — ADM-003
 
 상태 전이: PENDING → APPROVED/CANCELED, APPROVED → CANCELED, CANCELED → (불가)
-체크인이 지난 예약은 취소 불가(오늘은 한국 시간 기준). 변경 시 updated_at 기록.
+체크인이 지난 예약(오늘은 한국 시간 기준): 승인 예약은 취소 불가, 대기 예약은 승인 불가 · 취소로만 정리.
+변경 시 updated_at 기록.
+취소하면 canceled_at(취소 시각) · canceled_by(취소한 관리자 member_id)도 남긴다 (4-A4).
+동시에 눌러도 서로 덮어쓰지 않게 상태를 바꿀 예약 행을 잠그고 읽는다.
 
 GET   /admin/reservations?status=&from=&to=&keyword=&page=&size=   목록 (① 탭 · ② 검색)
 GET   /admin/reservations/counts?from=&to=&keyword=                 상태별 건수 (① 탭 옆 숫자)
@@ -12,7 +15,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, or_, select
 
-from app.api.deps import DB, require_admin
+from app.api.deps import DB, AdminMember, require_admin
 from app.core.dates import today_kst
 from app.core.exceptions import fail
 from app.models import Member, Reservation, Room
@@ -92,26 +95,39 @@ def status_counts(
     return {"ALL": sum(counts.values()), **counts}
 
 
-def _change_status(db, reservation_id: int, to: str) -> Reservation:
-    r = db.get(Reservation, reservation_id) or fail(404, "RESERVATION_NOT_FOUND", "예약을 찾을 수 없습니다.")
+def _change_status(db, reservation_id: int, to: str, admin: Member) -> Reservation:
+    # 예약 행을 잠근다(SELECT … FOR UPDATE). 두 관리자가 거의 동시에 승인 · 취소를 눌러도 뒤의 요청은 앞 요청이
+    # commit 할 때까지 기다렸다가 바뀐 상태를 읽고 409 가 된다. 잠그지 않으면 둘 다 옛 상태를 읽고 성공해서
+    # "취소 정보가 있는 승인 예약"이 생기고, 그사이 그 날짜에 들어온 다른 예약과 이중 예약이 될 수 있다.
+    r = db.get(Reservation, reservation_id, with_for_update=True) or fail(
+        404, "RESERVATION_NOT_FOUND", "예약을 찾을 수 없습니다."
+    )
     allowed = {PENDING: {APPROVED, CANCELED}, APPROVED: {CANCELED}, CANCELED: set()}
     if to not in allowed[r.status]:
         fail(409, "INVALID_STATUS", f"이미 {STATUS_LABEL[r.status]} 상태인 예약이라 {STATUS_LABEL[to]}할 수 없습니다.")
-    if to == CANCELED and r.check_in_date < today_kst():
-        fail(409, "PAST_CHECK_IN", "체크인이 지난 예약은 취소할 수 없습니다.")
+    if r.check_in_date < today_kst():
+        # 체크인이 지난 예약: 승인 예약은 실제로 묵은 기록이라 취소하지 않는다.
+        # 대기 예약은 묵지 않은 예약이라 승인하지 않고 취소로만 정리한다("승인 대기"에 계속 남지 않게).
+        if to == APPROVED:
+            fail(409, "PAST_CHECK_IN", "체크인이 지난 예약은 승인할 수 없습니다. 취소로 정리해 주세요.")
+        if r.status == APPROVED:
+            fail(409, "PAST_CHECK_IN", "체크인이 지난 예약은 취소할 수 없습니다.")
     r.status = to
     # created_at 과 같은 DB 시계(now())로 남긴다. 서버 PC 시간대(datetime.now())와 섞이지 않게
     r.updated_at = func.now()
+    if to == CANCELED:
+        r.canceled_at = func.now()
+        r.canceled_by = admin.member_id
     db.commit()
     db.refresh(r)
     return r
 
 
 @router.patch("/{reservation_id}/approve", response_model=ReservationOut)
-def approve(reservation_id: int, db: DB):
-    return _change_status(db, reservation_id, APPROVED)
+def approve(reservation_id: int, db: DB, admin: AdminMember):
+    return _change_status(db, reservation_id, APPROVED, admin)
 
 
 @router.patch("/{reservation_id}/cancel", response_model=ReservationOut)
-def cancel(reservation_id: int, db: DB):
-    return _change_status(db, reservation_id, CANCELED)
+def cancel(reservation_id: int, db: DB, admin: AdminMember):
+    return _change_status(db, reservation_id, CANCELED, admin)

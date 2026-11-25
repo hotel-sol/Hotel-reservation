@@ -1,5 +1,7 @@
 # 시연용 객실 사진 (room-photos)
 
+- 기준: dev `251bf9c`, 2026-11-25 (Step 3 반영). 이전 판: [docs/archive/2026-11-25_step2/frontend/public/room-photos/README.md](../../../docs/archive/2026-11-25_step2/frontend/public/room-photos/README.md)
+
 객실 종류별 시연용 사진 36장입니다. 종류마다 9장씩 있습니다.
 
 | 폴더 | 객실 종류 | 파일 |
@@ -22,4 +24,4 @@ INSERT INTO attach_file (target_type, target_id, original_name, saved_path, file
 VALUES ('ROOM', 1, 'standard_01.jpg', 'room-photos/standard/standard_01.jpg', 125468);
 ```
 
-관리 화면에서 직접 올린 사진은 `uploads/rooms/...`에 저장되며 이 폴더와는 별개입니다.
+관리 화면에서 직접 올린 사진은 이 폴더와 별개입니다. 백엔드 `.env`에 `SUPABASE_URL` · `SUPABASE_SECRET_KEY`가 있으면 Supabase Storage 버킷 `room-photos`에(`saved_path` = 공개 주소), 없으면 `uploads/rooms/...`에 저장됩니다. 이 폴더의 시연용 사진은 관리 화면에서 지워도 파일은 지우지 않습니다.

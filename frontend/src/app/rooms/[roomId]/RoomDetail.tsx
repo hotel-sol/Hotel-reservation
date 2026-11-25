@@ -8,6 +8,7 @@ import RoomCard from "@/components/RoomCard";
 import { ApiError } from "@/lib/api/client";
 import { roomsApi } from "@/lib/api/rooms";
 import { fileUrl, nightsBetween, won } from "@/lib/format";
+import { stayRangeError } from "../stayRange";
 import type { RecommendRoom, RoomDetail as Detail } from "@/types/api";
 
 const BADGE_NOTE = {
@@ -83,6 +84,8 @@ export default function RoomDetail() {
   const photos = room.photos.map(fileUrl);
   const nights = dated ? nightsBetween(checkIn, checkOut) : 0;
   const tooMany = guests !== "" && Number(guests) > room.maxGuest;
+  // #77: 예약과 같은 기간 제한을 벗어나면 예상 금액 대신 안내 + [날짜 다시 고르기]
+  const rangeError = dated ? stayRangeError(checkIn, checkOut)?.message ?? "" : "";
   const reserveHref = `/reservation/new?roomId=${room.roomId}${query ? `&${query}` : ""}`;
 
   return (
@@ -194,12 +197,17 @@ export default function RoomDetail() {
             <dl className="grid grid-cols-[64px_1fr] gap-y-1 text-sm">
               <dt className="text-slate-500">일정</dt><dd>{checkIn.slice(5)} ~ {checkOut.slice(5)} ({nights}박)</dd>
               {guests && <><dt className="text-slate-500">인원</dt><dd>{guests}명</dd></>}
-              <dt className="text-slate-500">예상 금액</dt><dd className="font-semibold">{won(room.price * nights)}</dd>
+              {!rangeError && <><dt className="text-slate-500">예상 금액</dt><dd className="font-semibold">{won(room.price * nights)}</dd></>}
             </dl>
           ) : (
             <p className="text-sm text-slate-500">날짜는 다음 화면에서 고를 수 있어요.</p>
           )}
-          {tooMany ? (
+          {rangeError ? (
+            <>
+              <p className="text-sm text-red-600">{rangeError} 날짜를 다시 골라 주세요.</p>
+              <Link href={`/rooms${query ? `?${query}` : ""}`} className="btn-outline w-full">날짜 다시 고르기</Link>
+            </>
+          ) : tooMany ? (
             <p className="text-sm text-red-600">이 객실은 최대 {room.maxGuest}명까지예요. 인원을 줄이거나 다른 객실을 골라 주세요.</p>
           ) : (
             <Link href={reserveHref} className="btn-primary w-full">예약하기</Link>

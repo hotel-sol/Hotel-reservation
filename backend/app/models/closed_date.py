@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Unicode, func
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -14,5 +14,5 @@ class ClosedDate(Base):
     closed_date_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     room_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("room.room_id"))
     closed_date: Mapped[date] = mapped_column(Date)
-    reason: Mapped[str | None] = mapped_column(Unicode(200))
+    closure_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("closure.closure_id", ondelete="CASCADE"))  # 사유는 묶음에
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

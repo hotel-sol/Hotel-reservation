@@ -7,12 +7,13 @@ from sqlalchemy import text
 from app.core.dates import today_kst
 from app.db.session import engine
 from app.services import room_service
+from tests import helpers
 
 pytestmark = pytest.mark.usefixtures("empty_db")
 
 API = "/api/rooms/recommend"
 TODAY = today_kst()
-FUTURE = TODAY + timedelta(days=400)
+FUTURE = TODAY + timedelta(days=300)  # 예약 가능 범위(365일) 안
 
 
 def run(sql, **params):
@@ -36,10 +37,8 @@ def room(name, views=0, price=100000, max_guest=2, active="Y", created=OLD):
 
 
 def book(room_id, check_in=FUTURE, nights=1, status="APPROVED", created=None):
-    run("INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date, guest_count, total_price,"
-        " status, created_at) VALUES (1, :room, :cin, :cout, 1, 1, :status, :created)",
-        room=room_id, cin=check_in, cout=check_in + timedelta(days=nights), status=status,
-        created=created or datetime.now())
+    helpers.add_reservation(room_id, check_in, nights, status, member_id=1, price_per_night=1,
+                            total_price=1, created_at=created)
 
 
 def get(client, **query):
@@ -196,10 +195,9 @@ def test_canceled_booking_does_not_block(client):
 def test_room_and_hotel_closed_dates_hide_rooms(client):
     a = room("A")
     room("B")
-    run("INSERT INTO closed_date (room_id, closed_date, reason) VALUES (:room, :day, '점검')", room=a, day=FUTURE)
+    helpers.add_closed_date(FUTURE, a, "점검")
     assert names(get(client, **stay(FUTURE, 2))) == ["B"]
-    run("INSERT INTO closed_date (room_id, closed_date, reason) VALUES (NULL, :day, '전체 휴무')",
-        day=FUTURE + timedelta(days=1))
+    helpers.add_closed_date(FUTURE + timedelta(days=1), None, "전체 휴무")
     assert get(client, **stay(FUTURE, 2))["total"] == 0
     # 휴무일이 체크아웃 날이면 묵지 않으므로 괜찮다
     assert sorted(names(get(client, **stay(FUTURE - timedelta(days=1), 1)))) == ["A", "B"]
@@ -231,6 +229,21 @@ def test_bad_dates_are_400(client, query):
     assert r.status_code == 400 and r.json()["detail"]["code"] == "INVALID_DATES"
 
 
+def test_stay_range_follows_reservation_rule(client):
+    """#77: 예약과 같은 제한 — 최대 MAX_NIGHTS 박, 체크인은 오늘부터 BOOKING_WINDOW_DAYS 일 안"""
+    from app.services.reservation_service import BOOKING_WINDOW_DAYS, MAX_NIGHTS
+
+    room("A")
+    assert names(get(client, **stay(TODAY, MAX_NIGHTS))) == ["A"]
+    assert names(get(client, **stay(TODAY + timedelta(days=BOOKING_WINDOW_DAYS), 1))) == ["A"]
+    for query, code in [
+        (stay(TODAY, MAX_NIGHTS + 1), "TOO_LONG_STAY"),
+        (stay(TODAY + timedelta(days=BOOKING_WINDOW_DAYS + 1), 1), "TOO_FAR_DATE"),
+    ]:
+        r = client.get(API, params=query)
+        assert r.status_code == 400 and r.json()["detail"]["code"] == code, r.text
+
+
 def test_today_check_in_is_allowed(client):
     room("A")
     assert names(get(client, **stay(TODAY, 1))) == ["A"]
@@ -253,7 +266,7 @@ def test_view_count_without_login_and_404_for_hidden_or_missing(client):
     hidden = room("B", active="N")
     assert client.post(f"/api/rooms/{a}/view").status_code == 204
     assert client.post(f"/api/rooms/{a}/view").status_code == 204
-    assert get(client)["items"][0]["viewCount"] == 2
+    assert get(client)["items"][0]["viewCount"] == 1  # 같은 손님 · 같은 날은 1번(1-A1, test_room_view.py)
     for room_id in (hidden, 999999):
         r = client.post(f"/api/rooms/{room_id}/view")
         assert r.status_code == 404 and r.json()["detail"]["code"] == "ROOM_NOT_FOUND"

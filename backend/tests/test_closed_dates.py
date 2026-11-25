@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.core.dates import today_kst
 from app.core.security import create_session_token
 from app.db.session import engine
+from tests import helpers
 
 pytestmark = pytest.mark.usefixtures("seeded_db")
 
@@ -22,12 +23,7 @@ D1 = max(TODAY + timedelta(days=30), date(2027, 1, 4))
 
 
 def add_reservation(room_id, check_in, nights, status="PENDING"):
-    with engine.begin() as conn:
-        conn.execute(
-            text("INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date, guest_count,"
-                 " total_price, status) VALUES (2, :room, :cin, :cout, 1, 80000, :status)"),
-            {"room": room_id, "cin": check_in, "cout": check_in + timedelta(days=nights), "status": status},
-        )
+    helpers.add_reservation(room_id, check_in, nights, status, total_price=80000)
 
 
 def post(client, day, room_id=None, reason="시설 점검", headers=ADMIN):
@@ -259,3 +255,90 @@ def test_available_rooms_ignores_inactive_rooms(client):
     assert post(client, D1 + timedelta(days=1)).status_code == 201
     assert left(D1 + timedelta(days=1)) == 0  # 호텔 전체 휴무
     assert len(client.get(f"{API}/available-rooms?month={month}", headers=ADMIN).json()) >= 28
+
+
+# ---- 휴무 묶음 (Step 3 · 3-A1~A3) ----
+
+def closures(client, month=D1, room_id=None, headers=ADMIN):
+    q = f"/api/admin/closures?month={month:%Y-%m}" + (f"&roomId={room_id}" if room_id else "")
+    return client.get(q, headers=headers)
+
+
+def test_range_is_one_closure_with_code_detail_and_admin(client):
+    body = {"startDate": D1.isoformat(), "endDate": (D1 + timedelta(days=2)).isoformat(), "roomId": 2,
+            "reasonCode": "MAINTENANCE", "reason": " 보일러 "}
+    rows = client.post(f"{API}/range", json=body, headers=ADMIN).json()
+    assert {r["reason"] for r in rows} == {"점검 · 보일러"}  # 날짜 행에는 화면 표시용 사유
+    assert len({r["closureId"] for r in rows}) == 1
+
+    [c] = closures(client, room_id=2).json()
+    assert (c["reasonCode"], c["reason"], c["roomName"], c["days"], c["createdBy"]) == ("MAINTENANCE", "보일러", "102호", 3, 1)
+    assert (c["startDate"], c["endDate"], c["status"]) == (D1.isoformat(), (D1 + timedelta(days=2)).isoformat(), "SCHEDULED")
+    assert closures(client, room_id=3).json() == []  # 다른 방 화면에는 안 보임
+
+
+def test_reason_rules(client):
+    def code_of(**extra):
+        body = {"closedDate": D1.isoformat(), "roomId": None, **extra}
+        r = client.post(API, json=body, headers=ADMIN)
+        return r.status_code, r.json()
+    assert code_of(reasonCode="ETC")[0] == 400  # 기타는 상세 필수
+    assert code_of(reasonCode="HOLIDAY", reason="x")[0] == 422  # 없는 분류
+    status, row = code_of(reasonCode="EVENT")  # 기타가 아니면 상세 없이 가능
+    assert status == 201 and row["reason"] == "행사"
+    [c] = closures(client).json()
+    assert (c["reasonCode"], c["reason"]) == ("EVENT", None)
+
+
+def test_delete_closure_releases_all_days_and_empty_closure_is_removed(client):
+    cid = post_range(client, D1, D1 + timedelta(days=4)).json()[0]["closureId"]
+    one = post(client, D1 + timedelta(days=10)).json()
+
+    # 하루 해제 → 묶음 기간 · 날짜 수가 남은 날짜 기준으로 바뀜
+    first_id = client.get(f"{API}?month={D1:%Y-%m}", headers=ADMIN).json()[0]["closedDateId"]
+    assert client.delete(f"{API}/{first_id}", headers=ADMIN).status_code == 204
+    c = next(x for x in closures(client).json() if x["closureId"] == cid)
+    assert (c["startDate"], c["days"]) == ((D1 + timedelta(days=1)).isoformat(), 4)
+
+    # 묶음 해제 → 남은 4일 모두 삭제, 다른 묶음은 그대로
+    assert client.delete(f"/api/admin/closures/{cid}", headers=ADMIN).json() == {"deleted": 4}
+    assert [x["closureId"] for x in closures(client).json()] == [one["closureId"]]
+    assert client.delete(f"/api/admin/closures/{cid}", headers=ADMIN).status_code == 404
+
+    # 마지막 날짜를 지우면 빈 묶음도 사라짐
+    assert client.delete(f"{API}/{one['closedDateId']}", headers=ADMIN).status_code == 204
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM closure")).scalar() == 0
+
+
+def test_closures_admin_only(client):
+    assert closures(client, headers=GUEST).status_code == 403
+    assert closures(client, headers={}).status_code == 401
+    assert client.delete("/api/admin/closures/1", headers=GUEST).status_code == 403
+
+
+# ---- #27 손님 예약 달력(4번 available-dates)에서 휴무일이 막히는지 ----
+
+def calendar(client, room_id, month=D1):
+    r = client.get(f"/api/rooms/{room_id}/available-dates?month={month:%Y-%m}")
+    assert r.status_code == 200, r.text
+    return {d["day"]: d for d in r.json()["days"]}
+
+
+def test_closed_dates_block_guest_calendar(client):
+    hotel, room1, room2 = D1, D1 + timedelta(days=2), D1 + timedelta(days=4)
+    helpers.add_closed_date(hotel)               # 호텔 전체 휴무
+    helpers.add_closed_date(room1, room_id=1)    # 1번 방만 휴무
+    helpers.add_closed_date(room2, room_id=2)    # 다른 방(2번)만 휴무
+
+    cal = calendar(client, 1)
+    assert (cal[hotel.isoformat()]["available"], cal[hotel.isoformat()]["reason"]) == (False, "CLOSED")
+    assert (cal[room1.isoformat()]["available"], cal[room1.isoformat()]["reason"]) == (False, "CLOSED")
+    assert cal[room2.isoformat()]["available"] is True                     # 다른 방 휴무는 이 방과 무관
+    assert cal[(room1 - timedelta(days=1)).isoformat()]["available"] is True  # 휴무 전날(= 체크아웃 날)은 선택 가능
+    assert calendar(client, 2)[room2.isoformat()]["reason"] == "CLOSED"     # 2번 방 달력에서는 막힘
+
+    # 휴무를 해제하면 다시 열림 (관리자 화면에서 묶음째 해제)
+    for c in client.get(f"/api/admin/closures?month={D1:%Y-%m}", headers=ADMIN).json():
+        client.delete(f"/api/admin/closures/{c['closureId']}", headers=ADMIN)
+    assert all(d["available"] for day, d in calendar(client, 1).items() if day >= D1.isoformat())

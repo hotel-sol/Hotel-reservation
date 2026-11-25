@@ -29,6 +29,26 @@ export interface Room {
   description: string | null;
   viewCount: number;
   isActive: "Y" | "N";
+  // 2-A1 등급 · 전망 · 침대 (예전 객실은 null)
+  gradeId: number | null;
+  viewType: ViewType | null;
+  bedType: string | null;
+}
+
+export type ViewType = "RIVER" | "CITY" | "MOUNTAIN"; // 리버뷰 · 시티뷰 · 마운틴뷰
+
+/** 객실 등급 (GET /api/room-grades, 2-A1). sortOrder 순으로 내려온다 */
+export interface RoomGrade {
+  gradeId: number;
+  gradeCode: string; // S · A · B · C
+  gradeName: string;
+  basePrice: number; // 비수기 · 시티/마운틴뷰 1박 요금 (리버뷰는 × 1.1)
+  baseGuest: number;
+  maxGuest: number;
+  areaM2: number;
+  bedType: string | null;
+  intro: string | null;
+  sortOrder: number;
 }
 
 /** 객실 관리 목록 요약 (GET /api/admin/rooms/summary). 휴무 = 예약 일자 관리(closed_date) 기준, 오늘 = 한국 시간 */
@@ -78,8 +98,11 @@ export interface Reservation {
   checkOutDate: string;
   guestCount: number;
   totalPrice: number;
+  pricePerNight: number | null; // 예약 때의 1박 요금 (4-A3). 옛 예약은 null 일 수 있음 → 총액만 표시
   status: ReservationStatus;
   requestMemo: string | null;
+  canceledAt: string | null; // 취소 시각 (취소 예약만)
+  canceledBy: number | null; // 취소한 회원 번호 (관리자 취소면 그 관리자)
   createdAt: string;
   updatedAt: string;
 }
@@ -89,7 +112,25 @@ export interface ClosedDate {
   roomId: number | null; // null = 호텔 전체 휴무
   roomName: string | null;
   closedDate: string;
-  reason: string | null;
+  reason: string | null; // 화면 표시용 "점검 · 보일러"
+  closureId: number | null; // 휴무 묶음 (3-A1)
+}
+
+/** 휴무 사유 분류 (3-A2): 공사 · 점검 · 행사 · 휴관 · 기타 */
+export type ClosureReasonCode = "CONSTRUCTION" | "MAINTENANCE" | "EVENT" | "CLOSURE" | "ETC";
+
+/** 휴무 묶음 (GET /api/admin/closures). 기간 = 남은 날짜의 처음 · 끝, 상태 = 예정 · 진행 중 · 종료 */
+export interface Closure {
+  closureId: number;
+  roomId: number | null; // null = 호텔 전체 휴무
+  roomName: string | null;
+  reasonCode: ClosureReasonCode;
+  reason: string | null; // 상세 사유
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: "SCHEDULED" | "ACTIVE" | "ENDED";
+  createdBy: number | null;
 }
 
 /** 예약 달력 하루 (RSV-001). reason: 지난 날 · 휴무 · 예약됨, 예약 가능하면 null */

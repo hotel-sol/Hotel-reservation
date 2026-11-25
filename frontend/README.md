@@ -1,5 +1,7 @@
 # Frontend — Next.js 16
 
+- 기준: dev `251bf9c`, 2026-11-25 (Step 3 반영). 이전 판: [docs/archive/2026-11-25_step2/frontend/README.md](../docs/archive/2026-11-25_step2/frontend/README.md)
+
 ## 실행
 
 ```bash
@@ -19,16 +21,16 @@ npm run dev                  # http://localhost:3000
 src/
 ├── app/                              라우트 (DB menu 테이블의 menu_url 과 맞춤)
 │   ├── layout.tsx                    공통 헤더(메뉴·로그인 상태)
-│   ├── rooms/                        ROOM-001 객실 추천
+│   ├── rooms/                        ROOM-001 객실 추천, rooms/[roomId]/ 객실 상세
 │   ├── reservation/new/              RSV-001 객실 예약  (?roomId=&checkIn=&checkOut=&guests=)
 │   ├── reservation/[reservationId]/complete/   RSV-002 예약 완료
-│   ├── reservation/list/             내 예약 조회
-│   ├── login/ · signup/ · mypage/ · password-reset/
+│   ├── reservation/list/             내 예약 조회 (손님 취소 버튼 없음, 취소는 관리자만)
+│   ├── login/ · signup/ · mypage/ · password-reset/   (password-reset 은 시연 전까지 안내 화면만)
 │   └── admin/                        관리자 (AdminGuard 로 화면 보호, 실제 권한은 백엔드)
-│       ├── rooms/                    ADM-001
-│       ├── closed-dates/             ADM-002
+│       ├── rooms/                    ADM-001 (등급은 GET /api/room-grades)
+│       ├── closed-dates/             ADM-002 (휴무 묶음 목록: 예정 · 진행 중 · 종료)
 │       └── reservations/             ADM-003
-├── components/                       Header, RoomCard, Pagination, StatusBadge, PageTitle
+├── components/                       Header, RoomCard, RoomBadge, HeroSlider, AuthLayout, FormField, Pagination, StatusBadge, PageTitle
 ├── lib/
 │   ├── api/                          client.ts(fetch 래퍼·ApiError) + 도메인별 API 함수
 │   └── format.ts                     금액·날짜·상태 라벨

@@ -19,7 +19,8 @@ INSERT INTO menu (parent_id, menu_name, menu_url, role, sort_order) VALUES
   (NULL, '예약 일자 관리', '/admin/closed-dates', 'ADMIN', 2),
   (NULL, '예약 관리', '/admin/reservations', 'ADMIN', 3),
   (NULL, '객실 추천', '/rooms', 'USER', 1),
-  (NULL, '내 예약', '/reservation/list', 'USER', 2);
+  (NULL, '내 예약', '/reservation/list', 'USER', 2),
+  (NULL, '마이페이지', '/mypage', 'USER', 3);  -- 1번 요청(11-25): 헤더에 마이페이지 링크
 
 INSERT INTO room (room_name, room_type, max_guest, price, description, view_count, is_active) VALUES
   ('1601호', '로얄 스위트', 6, 4400000, '16층 · 리버뷰 · 킹1 + 퀸2 · 200㎡ · 조식 · 라운지 포함. 두 개의 침실과 독립 거실을 갖춘 200㎡ 최상위 스위트. 최대 6명, 조식·라운지 포함', 165, 'Y'),
@@ -68,6 +69,13 @@ UPDATE room SET created_at = now() - interval '60 days';
 UPDATE room SET created_at = now() - interval '2 days' WHERE room_name = '1302호';  -- 이그제큐티브 스위트
 UPDATE room SET created_at = now() - interval '5 days' WHERE room_name = '1204호';  -- 프리미어
 UPDATE room SET created_at = now() - interval '9 days' WHERE room_name = '0904호';  -- 디럭스
+
+-- 등급 · 전망 · 침대 (2-A1): room_type = 등급명, 설명의 둘째 칸 = 전망, 셋째 칸 = 침대
+UPDATE room r SET grade_id = g.grade_id FROM room_grade g WHERE r.room_type = g.grade_name;
+UPDATE room SET
+  view_type = CASE split_part(description, ' · ', 2)
+                WHEN '리버뷰' THEN 'RIVER' WHEN '시티뷰' THEN 'CITY' WHEN '마운틴뷰' THEN 'MOUNTAIN' END,
+  bed_type  = split_part(description, ' · ', 3);
 
 -- 객실 사진: room_id 는 위 INSERT 순서(1601호 = 1 … 0504호 = 40). 방마다 첫 줄이 대표 사진
 INSERT INTO attach_file (target_type, target_id, original_name, saved_path, file_size) VALUES

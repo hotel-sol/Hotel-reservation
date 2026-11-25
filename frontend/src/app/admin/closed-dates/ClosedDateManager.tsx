@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/api/admin";
 import { ApiError } from "@/lib/api/client";
 import { today } from "@/lib/format";
-import type { ClosedDate, ReservationCounts, Room } from "@/types/api";
+import type { ClosedDate, Closure, ClosureReasonCode, ReservationCounts, Room } from "@/types/api";
 
 /**
  * ADM-002 예약 일자(휴무일) 관리
  *  ① 객실 선택 · 월 이동   "전체 객실" = 호텔 전체 휴무, 특정 객실 = 그 방만 휴무
  *  ② 달력                  날짜별 휴무 여부 + 예약 수(대기 + 승인). Shift+클릭 = 끝 날짜. 지난 날짜도 지정 · 해제 가능
  *  ③ 휴무 지정 / 해제      예약이 있는 날은 백엔드가 409 로 막는다. 끝 날짜를 고르면 기간 지정 · 기간 해제
- *  ④ 이번 달 휴무일 목록   바로 해제
+ *  ④ 이번 달 휴무 목록     묶음(한 번에 지정한 기간) 단위로 기간 · 사유 · 상태, 묶음째 해제 (3-A1)
  */
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -41,8 +41,16 @@ function dayLabel(date: string) {
 
 const shortDate = (date: string) => date.slice(5).replace("-", "/");
 
-// 3C 사유 선택지(화면 선택지). DB에는 "점검 · 보일러" 같은 글자로 저장한다(테이블 변경 없음)
-const REASON_TYPES = ["공사", "점검", "행사", "휴관", "기타"];
+// 사유 분류(3-A2). 서버가 분류 코드 + 상세로 저장하고, 날짜 행에는 "점검 · 보일러"처럼 표시용 글자도 남긴다
+const REASON_TYPES: { code: ClosureReasonCode; label: string }[] = [
+  { code: "CONSTRUCTION", label: "공사" },
+  { code: "MAINTENANCE", label: "점검" },
+  { code: "EVENT", label: "행사" },
+  { code: "CLOSURE", label: "휴관" },
+  { code: "ETC", label: "기타" },
+];
+const reasonLabel = (code: ClosureReasonCode) => REASON_TYPES.find((t) => t.code === code)?.label ?? code;
+const STATUS_LABEL: Record<Closure["status"], string> = { SCHEDULED: "예정", ACTIVE: "진행 중", ENDED: "종료" };
 
 const MAX_RANGE_DAYS = 31; // 백엔드 POST /admin/closed-dates/range 와 같은 값
 
@@ -57,11 +65,12 @@ export default function ClosedDateManager() {
   const [month, setMonth] = useState(() => today().slice(0, 7));
   const [rooms, setRooms] = useState<Room[]>([]);
   const [closed, setClosed] = useState<ClosedDate[]>([]);
+  const [groups, setGroups] = useState<Closure[]>([]); // ④ 휴무 묶음
   const [counts, setCounts] = useState<ReservationCounts>({});
   const [left, setLeft] = useState<Record<string, number>>({}); // 날짜별 남은 객실 수(전체 객실 화면)
   const [selected, setSelected] = useState<string | null>(null);
   const [endDate, setEndDate] = useState(""); // 기간 지정 끝 날짜. 비면 하루만
-  const [reasonType, setReasonType] = useState("");
+  const [reasonType, setReasonType] = useState<ClosureReasonCode | "">("");
   const [reason, setReason] = useState(""); // 자세한 내용(기타면 필수)
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -86,12 +95,14 @@ export default function ClosedDateManager() {
       adminApi.closedDates(month, id),
       adminApi.reservationCounts(month, id),
       roomId === null ? adminApi.availableRooms(month) : Promise.resolve({}),
+      adminApi.closures(month, id),
     ])
-      .then(([c, n, a]) => {
+      .then(([c, n, a, g]) => {
         if (ignore) return;
         setClosed(c);
         setCounts(n);
         setLeft(a);
+        setGroups(g);
       })
       .catch((e: ApiError) => { if (!ignore) setError(e.message); });
     return () => { ignore = true; };
@@ -142,18 +153,18 @@ export default function ClosedDateManager() {
   }
 
   const detail = reason.trim();
-  const fullReason = reasonType === "기타" ? detail : detail ? `${reasonType} · ${detail}` : reasonType;
-  const reasonReady = !!reasonType && (reasonType !== "기타" || !!detail);
+  const reasonReady = !!reasonType && (reasonType !== "ETC" || !!detail);
 
   const isRange = !!selected && endDate > selected;
   const inRange = (date: string) => isRange && date > selected! && date <= endDate;
 
   const close = () =>
     selected &&
+    reasonType &&
     run(() =>
       isRange
-        ? adminApi.createClosedDateRange({ roomId, startDate: selected, endDate, reason: fullReason })
-        : adminApi.createClosedDate({ roomId, closedDate: selected, reason: fullReason }),
+        ? adminApi.createClosedDateRange({ roomId, startDate: selected, endDate, reasonCode: reasonType, reason: detail })
+        : adminApi.createClosedDate({ roomId, closedDate: selected, reasonCode: reasonType, reason: detail }),
     );
 
   function openRange() {
@@ -161,6 +172,13 @@ export default function ClosedDateManager() {
     const where = roomId === null ? "호텔 전체" : rooms.find((r) => r.roomId === roomId)?.roomName ?? "";
     if (!confirm(`${shortDate(selected)} ~ ${shortDate(endDate)} ${where} 휴무를 모두 해제할까요?`)) return;
     run(() => adminApi.deleteClosedDateRange({ startDate: selected, endDate, roomId }));
+  }
+
+  function openGroup(g: Closure) {
+    const where = g.roomName ?? "호텔 전체";
+    const period = g.startDate === g.endDate ? shortDate(g.startDate) : `${shortDate(g.startDate)} ~ ${shortDate(g.endDate)}`;
+    if (!confirm(`${period} ${where} 휴무(${g.days}일)를 모두 해제할까요?`)) return;
+    run(() => adminApi.deleteClosure(g.closureId));
   }
 
   function open(row: ClosedDate) {
@@ -271,9 +289,9 @@ export default function ClosedDateManager() {
                   <>
                     <p className="rounded-md bg-red-50 px-3 py-2 text-red-700">휴무 · {sel.own.reason ?? "사유 없음"}</p>
                     <label className="block text-xs text-slate-500">
-                      끝 날짜 (기간으로 해제할 때만)
+                      끝 날짜 (기간으로 해제할 때만, 최대 31일)
                       <input className="input mt-1" type="date" value={endDate} min={selected}
-                        onChange={(e) => setEndDate(e.target.value)} />
+                        max={addDays(selected, MAX_RANGE_DAYS - 1)} onChange={(e) => setEndDate(e.target.value)} />
                     </label>
                     {isRange ? (
                       <button type="button" className="btn-outline w-full" disabled={busy} onClick={openRange}>
@@ -302,14 +320,14 @@ export default function ClosedDateManager() {
                     <label className="block text-xs text-slate-500">
                       휴무 사유
                       <select className="input mt-1" value={reasonType} required
-                        onChange={(e) => setReasonType(e.target.value)}>
+                        onChange={(e) => setReasonType(e.target.value as ClosureReasonCode | "")}>
                         <option value="">선택하세요</option>
-                        {REASON_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        {REASON_TYPES.map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}
                       </select>
                     </label>
                     <label className="block text-xs text-slate-500">
-                      자세한 내용 {reasonType === "기타" ? "(필수)" : "(선택)"}
-                      <input className="input mt-1" value={reason} maxLength={180} required={reasonType === "기타"}
+                      자세한 내용 {reasonType === "ETC" ? "(필수)" : "(선택)"}
+                      <input className="input mt-1" value={reason} maxLength={180} required={reasonType === "ETC"}
                         placeholder="예: 보일러 교체" onChange={(e) => setReason(e.target.value)} />
                     </label>
                     <label className="block text-xs text-slate-500">
@@ -332,21 +350,27 @@ export default function ClosedDateManager() {
             )}
           </div>
 
-          {/* ④ 이번 달 휴무일 목록 */}
+          {/* ④ 이번 달 휴무 목록 — 묶음(한 번에 지정한 기간) 단위 */}
           <div className="card text-sm">
-            <h2 className="mb-2 font-semibold">이번 달 휴무일</h2>
-            {closed.length === 0 ? (
-              <p className="text-slate-400">휴무일이 없습니다.</p>
+            <h2 className="mb-2 font-semibold">이번 달 휴무</h2>
+            {groups.length === 0 ? (
+              <p className="text-slate-400">휴무가 없습니다.</p>
             ) : (
               <ul className="divide-y divide-slate-100">
-                {closed.map((c) => (
-                  <li key={c.closedDateId} className="flex items-center justify-between gap-2 py-2">
+                {groups.map((g) => (
+                  <li key={g.closureId} className="flex items-center justify-between gap-2 py-2">
                     <span>
-                      {shortDate(c.closedDate)} {c.roomName ?? "전체"}
-                      <span className="text-slate-500"> · {c.reason ?? "사유 없음"}</span>
+                      {g.startDate === g.endDate ? shortDate(g.startDate) : `${shortDate(g.startDate)} ~ ${shortDate(g.endDate)}`}{" "}
+                      {g.roomName ?? "전체"}
+                      <span className="text-slate-500">
+                        {" "}· {reasonLabel(g.reasonCode)}{g.reason ? ` · ${g.reason}` : ""}
+                      </span>
+                      <span className={`ml-1 rounded px-1.5 py-0.5 text-xs ${
+                        g.status === "ACTIVE" ? "bg-red-50 text-red-700" : g.status === "SCHEDULED" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-500"
+                      }`}>{STATUS_LABEL[g.status]}</span>
                     </span>
                     <button type="button" className="shrink-0 text-red-600 hover:underline disabled:opacity-50"
-                      disabled={busy} onClick={() => open(c)}>해제</button>
+                      disabled={busy} onClick={() => openGroup(g)}>해제</button>
                   </li>
                 ))}
               </ul>

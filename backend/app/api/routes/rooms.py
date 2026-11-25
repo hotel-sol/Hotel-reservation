@@ -1,9 +1,10 @@
 """객실 (손님) — ROOM-001 객실 추천, RSV-001 객실 정보"""
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Query
+from sqlalchemy import text, update
 
-from app.api.deps import DB
+from app.api.deps import DB, SessionCookie, member_from_cookie
 from app.core.dates import today_kst
 from app.schemas.room import RoomDetailOut
 from app.services.room_service import room_detail
@@ -14,7 +15,14 @@ from app.schemas.room import RecommendRoomOut, RoomOut, RoomSort
 from app.services.room_service import recommend_rooms
 from app.schemas.reservation import AvailableDatesOut, QuoteOut
 from app.services.availability_service import month_range, room_calendar
-from app.services.reservation_service import check_stay, get_bookable_room, total_price
+from app.services.reservation_service import (
+    BOOKING_WINDOW_DAYS,
+    MAX_NIGHTS,
+    check_stay,
+    get_bookable_room,
+    night_price,
+    total_price,
+)
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -26,7 +34,7 @@ def recommend(
     check_out: date | None = Query(None, alias="checkOut"),
     guests: int | None = Query(None, ge=1),
     sort: RoomSort = "recommend",
-    page: int = Query(1, ge=1),
+    page: int = Query(1, ge=1, le=10000),  # 아주 큰 값이면 OFFSET 범위를 넘어 500 → 상한
     size: int = Query(6, ge=1, le=50),
 ):
     if (check_in is None) != (check_out is None):
@@ -35,6 +43,11 @@ def recommend(
         fail(400, "INVALID_DATES", "지난 날짜는 선택할 수 없습니다.")
     if check_in and check_out and check_out <= check_in:
         fail(400, "INVALID_DATES", "체크아웃은 체크인 다음 날부터 선택할 수 있습니다.")
+    # #77: 예약(4번 reservation_service)과 같은 기간 제한 · 같은 오류 코드. 숫자는 그쪽 상수를 그대로 쓴다
+    if check_in and check_in > today_kst() + timedelta(days=BOOKING_WINDOW_DAYS):
+        fail(400, "TOO_FAR_DATE", f"체크인은 오늘부터 {BOOKING_WINDOW_DAYS}일 안의 날짜만 예약할 수 있습니다.")
+    if check_in and check_out and (check_out - check_in).days > MAX_NIGHTS:
+        fail(400, "TOO_LONG_STAY", f"한 번에 최대 {MAX_NIGHTS}박까지 예약할 수 있습니다.")
     items, total = recommend_rooms(
         db, check_in=check_in, check_out=check_out, guests=guests, sort=sort, page=page, size=size
     )
@@ -51,11 +64,21 @@ def get_room(room_id: int, db: DB):
 
 
 @router.post("/{room_id}/view", status_code=204)
-def increase_view(room_id: int, db: DB):
+def increase_view(room_id: int, db: DB, hotel_session: SessionCookie = None):
+    """조회수(1-A1): 같은 사람 · 같은 방 · 같은 날(한국 날짜)은 1번만 센다. room.view_count 는 뜻 그대로(2번 화면이 읽음).
+    회원은 M:<member_id> 로 한 사람씩. 비회원은 모두 합쳐 "G" 하나로 센다(방마다 하루 최대 +1):
+    번호표 쿠키로 나누면 쿠키를 버리고 계속 부르는 프로그램이 무한히 올릴 수 있어서(#67-2)."""
     room = db.get(Room, room_id)
     if room is None or room.is_active != "Y":
         fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
-    room.view_count += 1
+    member = member_from_cookie(db, hotel_session)
+    viewer = f"M:{member.member_id}" if member is not None else "G"
+    first = db.execute(
+        text("INSERT INTO room_view (room_id, viewer_key, view_date) VALUES (:r, :v, :d) ON CONFLICT DO NOTHING"),
+        {"r": room_id, "v": viewer, "d": today_kst()},
+    ).rowcount
+    if first:  # 오늘 처음 본 사람일 때만 +1 (UPDATE 한 줄로 올려서 동시에 눌러도 안 빠짐)
+        db.execute(update(Room).where(Room.room_id == room_id).values(view_count=Room.view_count + 1))
     db.commit()
 
 
@@ -95,6 +118,6 @@ def quote(
         check_out=check_out,
         guests=guests,
         nights=nights,
-        price_per_night=room.price,
+        price_per_night=night_price(room),
         total_price=total_price(room, nights),
     )

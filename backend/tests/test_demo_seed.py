@@ -60,3 +60,14 @@ def test_recommend_shows_demo_rooms_with_thumbnails(client, demo_db):
     assert len(items) == 40
     assert all(i["thumbnailUrl"] and i["thumbnailUrl"].startswith("room-photos/") for i in items)
     assert sum(i["isRecommended"] for i in items) == 3  # 추천 점수 1~3위 (BEST)
+
+
+def test_rooms_have_grade_view_bed(demo_db):
+    """2-A1: 40실 모두 등급 · 전망 · 침대가 있고, 요금 = 등급 기준가 × 전망 배율(리버뷰 1.1)."""
+    rooms = rows("SELECT r.room_name, r.price, r.view_type, r.bed_type, g.base_price"
+                 " FROM room r JOIN room_grade g ON g.grade_id = r.grade_id")
+    assert len(rooms) == 40
+    assert {r.view_type for r in rooms} == {"RIVER", "CITY", "MOUNTAIN"}
+    assert all(r.bed_type for r in rooms)
+    for r in rooms:
+        assert r.price == round(r.base_price * (1.1 if r.view_type == "RIVER" else 1)), r.room_name

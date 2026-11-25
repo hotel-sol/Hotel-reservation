@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.dates import today_kst
 from app.core.security import create_session_token
 from app.db.session import engine
+from tests import helpers
 
 pytestmark = pytest.mark.usefixtures("seeded_db")
 
@@ -32,15 +33,11 @@ def run(sql, **params):
 
 
 def reserve(room_id, check_in, nights=1, status="APPROVED"):
-    run(
-        "INSERT INTO reservation (member_id, room_id, check_in_date, check_out_date, guest_count, total_price, status)"
-        " VALUES (2, :room, :cin, :cout, 1, 80000, :status)",
-        room=room_id, cin=check_in, cout=check_in + timedelta(days=nights), status=status,
-    )
+    helpers.add_reservation(room_id, check_in, nights, status, total_price=80000)
 
 
 def close(day, room_id=None):
-    run("INSERT INTO closed_date (room_id, closed_date, reason) VALUES (:room, :day, '점검')", room=room_id, day=day)
+    helpers.add_closed_date(day, room_id, "점검")
 
 
 def room1(**change):
@@ -138,3 +135,169 @@ def test_summary_hotel_wide_closure_soon(client):
 def test_admin_only(client):
     assert client.get("/api/admin/rooms/summary").status_code == 401
     assert client.get("/api/admin/rooms/summary", headers=GUEST).status_code == 403
+
+
+# ---------- 2-A1 등급 · 전망 · 침대 ----------
+
+def grades(client):
+    r = client.get("/api/room-grades")  # 로그인 없이 읽기
+    assert r.status_code == 200, r.text
+    return {g["gradeCode"]: g for g in r.json()}
+
+
+def test_room_grades_list(client):
+    r = client.get("/api/room-grades")
+    assert [g["gradeCode"] for g in r.json()] == ["S", "A", "B", "C"]  # sort_order 순
+    c = grades(client)["C"]
+    assert (c["gradeName"], c["basePrice"], c["maxGuest"], c["areaM2"]) == ("디럭스", 550000, 2, 40)
+
+
+def test_create_room_with_grade_sets_room_type(client):
+    deluxe = grades(client)["C"]
+    body = {"roomName": "0777호", "roomType": "아무 글자", "maxGuest": 2, "price": 605000,
+            "gradeId": deluxe["gradeId"], "viewType": "RIVER", "bedType": "트윈"}
+    r = client.post("/api/admin/rooms", json=body, headers=ADMIN)
+    assert r.status_code == 201, r.text
+    room = r.json()
+    assert room["roomType"] == "디럭스"  # 등급 이름으로 맞춤 (1 · 4 · 5번이 읽는 글자)
+    assert (room["gradeId"], room["viewType"], room["bedType"]) == (deluxe["gradeId"], "RIVER", "트윈")
+
+
+def test_create_room_without_grade_still_works(client):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0778호"), headers=ADMIN)
+    assert r.status_code == 201, r.text
+    assert (r.json()["roomType"], r.json()["gradeId"], r.json()["viewType"]) == ("STANDARD", None, None)
+
+
+def test_unknown_grade_rejected(client):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0779호", gradeId=99999), headers=ADMIN)
+    assert r.status_code == 400
+    assert r.json()["detail"]["code"] == "GRADE_NOT_FOUND"
+
+
+def test_unknown_view_rejected(client):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0779호", viewType="OCEAN"), headers=ADMIN)
+    assert r.status_code == 422
+
+
+def test_future_reservation_blocks_grade_change(client):
+    reserve(1, TODAY + timedelta(days=10))
+    r = put(client, room1(gradeId=grades(client)["C"]["gradeId"]))  # STANDARD → 디럭스
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "FUTURE_RESERVATION_EXISTS"
+
+
+def test_future_reservation_allows_view_and_bed_change(client):
+    reserve(1, TODAY + timedelta(days=10))
+    r = put(client, room1(viewType="CITY", bedType="킹"))  # 요금 · 인원 · 종류 그대로
+    assert r.status_code == 200, r.text
+    assert (r.json()["viewType"], r.json()["bedType"]) == ("CITY", "킹")
+
+
+# ---------- #69 요금 · 인원 상한 ----------
+
+@pytest.mark.parametrize("change", [{"price": 10_000_001}, {"maxGuest": 21}, {"price": 3_000_000_000}])
+def test_price_and_guest_upper_limits(client, change):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0780호", **change), headers=ADMIN)
+    assert r.status_code == 422  # 500 이 아니라 입력 오류
+
+
+def test_limits_themselves_allowed(client):
+    r = client.post("/api/admin/rooms", json=room1(roomName="0781호", price=10_000_000, maxGuest=20), headers=ADMIN)
+    assert r.status_code == 201, r.text
+
+
+# ---------- #76 약점 점검 2차 ----------
+
+def status(client, room_id, value):
+    return client.patch(f"/api/admin/rooms/{room_id}/status", json={"isActive": value}, headers=ADMIN)
+
+
+@pytest.mark.parametrize("change", [{"roomName": "   "}, {"roomType": "  "}])
+def test_blank_name_or_type_rejected(client, change):
+    """#76-1: 공백만 있는 이름 · 종류는 입력 오류."""
+    r = client.post("/api/admin/rooms", json=room1(**{"roomName": "0782호", **change}), headers=ADMIN)
+    assert r.status_code == 422
+
+
+def test_name_spaces_trimmed_and_duplicate_caught(client):
+    """#76-2: 앞뒤 공백은 지우고 저장 → 공백을 붙여도 중복 검사를 피하지 못한다."""
+    r = client.post("/api/admin/rooms", json=room1(roomName=" 0783호 ", roomType=" 디럭스 ", bedType=" 킹 "), headers=ADMIN)
+    assert r.status_code == 201, r.text
+    assert (r.json()["roomName"], r.json()["roomType"], r.json()["bedType"]) == ("0783호", "디럭스", "킹")
+    for name in ["0783호 ", "101호 "]:
+        dup = client.post("/api/admin/rooms", json=room1(roomName=name), headers=ADMIN)
+        assert dup.status_code == 409, name
+        assert dup.json()["detail"]["code"] == "DUPLICATE_ROOM_NAME"
+    assert put(client, room1(roomName="0783호 "), room_id=2).status_code == 409  # 수정도 같음
+
+
+@pytest.mark.parametrize("st", ["APPROVED", "PENDING"])
+def test_future_reservation_blocks_deactivate(client, st):
+    """#76-3 (팀 결정 ⓐ): 앞으로 묵을 예약이 있으면 비활성화 409 — 수정과 같은 규칙."""
+    reserve(1, TODAY + timedelta(days=3), status=st)
+    r = status(client, 1, "N")
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "FUTURE_RESERVATION_EXISTS"
+    assert "1건" in r.json()["detail"]["message"] and "취소" in r.json()["detail"]["message"]
+    assert client.get("/api/admin/rooms", params={"keyword": "101호"}, headers=ADMIN).json()["items"][0]["isActive"] == "Y"
+
+
+def test_past_or_canceled_reservation_allows_deactivate(client):
+    reserve(1, TODAY - timedelta(days=5), nights=2)
+    reserve(1, TODAY + timedelta(days=3), status="CANCELED")
+    r = status(client, 1, "N")
+    assert r.status_code == 200, r.text
+    assert r.json()["isActive"] == "N"
+
+
+def test_activate_not_blocked_by_reservation(client):
+    """다시 켜기(N → Y)는 예약과 상관없이 된다."""
+    run("UPDATE room SET is_active = 'N' WHERE room_id = 1")
+    reserve(1, TODAY + timedelta(days=3))
+    assert status(client, 1, "Y").status_code == 200
+
+
+def test_same_name_saved_twice_at_once_is_409(client, monkeypatch):
+    """#76-4: 두 요청이 동시에 중복 확인을 통과한 상황 → 늦은 쪽은 DB UNIQUE 에 걸리는데 500 이 아니라 409."""
+    from app.api.routes.admin import rooms
+
+    real = rooms.ensure_unique_name
+    calls = []
+
+    def first_check_misses(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return None  # 첫 확인 때는 아직 상대 요청이 저장 전이었다고 흉내
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(rooms, "ensure_unique_name", first_check_misses)
+    r = client.post("/api/admin/rooms", json=room1(), headers=ADMIN)  # 101호 = 이미 있음
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "DUPLICATE_ROOM_NAME"
+    assert len(calls) == 2  # 저장 실패 뒤 다시 확인해서 409
+
+
+# ---------- 준엽님 점검 (Discord, 11-25) ----------
+
+def test_update_locks_room_while_checking_reservations(client, monkeypatch):
+    """객실 수정은 예약 확인 전에 객실 행을 잠근다 → 확인과 저장 사이에 손님 예약(객실 행 잠금)이 끼어들지 못한다."""
+    from sqlalchemy.exc import OperationalError
+
+    from app.api.routes.admin import rooms
+
+    real = rooms.future_reservation_count
+    seen = []
+
+    def count_and_try_lock(db, room_id):
+        try:
+            with engine.begin() as c:  # 다른 요청(예약)인 척: 그 방을 바로 잠글 수 있나
+                c.execute(text("SELECT room_id FROM room WHERE room_id = :id FOR UPDATE NOWAIT"), {"id": room_id})
+            seen.append("잠글 수 있음")
+        except OperationalError:
+            seen.append("이미 잠겨 있음")
+        return real(db, room_id)
+
+    monkeypatch.setattr(rooms, "future_reservation_count", count_and_try_lock)
+    assert put(client, room1(price=90000)).status_code == 200
+    assert seen == ["이미 잠겨 있음"]
