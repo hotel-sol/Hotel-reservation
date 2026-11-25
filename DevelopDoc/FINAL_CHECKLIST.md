@@ -36,11 +36,11 @@
 
 ## 4. 데이터 · DB
 
-- [ ] 공용 `hotel` 스키마에 시연 데이터: 팀에 알린 뒤 `uv run python -m app.db.init_db --demo --reset-shared`
+- [x] 공용 `hotel` 스키마에 시연 데이터 (11-25 완료): 팀에 알린 뒤 `uv run python -m app.db.init_db --demo --reset-shared`
 - [ ] 공용 관리자 `admin01` 로그인 확인(비밀번호는 팀 채팅)
 - [x] DB 시간대 `Asia/Seoul` (11-24)
 - [x] 팀 Supabase에 `btree_gist` 확장(`extensions` 스키마) 켜 둠 — 이중 예약 제약에 필요 (11-25)
-- [ ] 공용 `hotel` 스키마를 Step 3 DDL(테이블 10개)로 다시 만들었는지 (확인 필요)
+- [x] 공용 `hotel` 스키마를 Step 3 DDL(테이블 10개)로 다시 만듦 — 11-25 완료(객실 40 · 사진 142 · admin01 · 이중 예약 제약 확인, #60 공지)
 - [ ] 발표 직전 Supabase 대시보드에서 프로젝트 상태 확인(무료 플랜은 7일 접속이 없으면 일시 정지)
 
 ## 5. 보안
