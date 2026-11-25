@@ -6,6 +6,22 @@ from app.schemas.common import CamelModel
 
 RoomSort = Literal["recommend", "popular", "price"]
 RoomBadge = Literal["BEST", "HOT", "NEW"]
+ViewType = Literal["RIVER", "CITY", "MOUNTAIN"]  # 리버뷰 · 시티뷰 · 마운틴뷰
+
+
+class RoomGradeOut(CamelModel):
+    """객실 등급 (2-A1, GET /api/room-grades)"""
+
+    grade_id: int
+    grade_code: str
+    grade_name: str
+    base_price: int  # 비수기 · 시티/마운틴뷰 1박 요금 (리버뷰는 × 1.1)
+    base_guest: int
+    max_guest: int
+    area_m2: int
+    bed_type: str | None
+    intro: str | None
+    sort_order: int
 
 
 class RoomOut(CamelModel):
@@ -17,6 +33,10 @@ class RoomOut(CamelModel):
     description: str | None
     view_count: int
     is_active: str
+    # 2-A1 등급 · 전망 · 침대 (예전 객실은 null)
+    grade_id: int | None = None
+    view_type: str | None = None
+    bed_type: str | None = None
 
 
 class RecommendRoomOut(RoomOut):
@@ -39,6 +59,10 @@ class RoomCreate(CamelModel):
     max_guest: int = Field(ge=1)
     price: int = Field(gt=0)
     description: str | None = Field(default=None, max_length=1000)
+    # 2-A1: 등급을 주면 서버가 room_type 을 등급 이름으로 맞춘다. 안 주면 예전처럼 room_type 글자 그대로
+    grade_id: int | None = None
+    view_type: ViewType | None = None
+    bed_type: str | None = Field(default=None, max_length=30)
 
 
 class RoomUpdate(RoomCreate):

@@ -7,11 +7,15 @@ import type {
   ReservationStatus,
   ReservationStatusCounts,
   Room,
+  RoomGrade,
   RoomSummary,
 } from "@/types/api";
 import { api } from "./client";
 
-export type RoomInput = Pick<Room, "roomName" | "roomType" | "maxGuest" | "price" | "description">;
+export type RoomInput = Pick<
+  Room,
+  "roomName" | "roomType" | "maxGuest" | "price" | "description" | "gradeId" | "viewType" | "bedType"
+>;
 
 export const adminApi = {
   // ADM-001 객실 관리
@@ -23,6 +27,7 @@ export const adminApi = {
     api<Room>(`/admin/rooms/${roomId}/status`, { method: "PATCH", json: { isActive } }),
   // 목록 위 요약 카드 (전체 · 판매 중 · 오늘 휴무 · 휴무 예정 · 비활성)
   roomSummary: () => api<RoomSummary>("/admin/rooms/summary"),
+  roomGrades: () => api<RoomGrade[]>("/room-grades"), // 2-A1 등급 4개 (로그인 없이 읽기)
   // 객실 사진 (jpg·png, 객실당 최대 5장. 첫 장이 추천 카드 대표 사진)
   roomPhotos: (roomId: number) => api<AttachFile[]>("/files", { query: { targetType: "ROOM", targetId: roomId } }),
   uploadRoomPhoto: (roomId: number, file: File) => {

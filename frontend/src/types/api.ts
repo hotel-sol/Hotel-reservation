@@ -29,6 +29,26 @@ export interface Room {
   description: string | null;
   viewCount: number;
   isActive: "Y" | "N";
+  // 2-A1 등급 · 전망 · 침대 (예전 객실은 null)
+  gradeId: number | null;
+  viewType: ViewType | null;
+  bedType: string | null;
+}
+
+export type ViewType = "RIVER" | "CITY" | "MOUNTAIN"; // 리버뷰 · 시티뷰 · 마운틴뷰
+
+/** 객실 등급 (GET /api/room-grades, 2-A1). sortOrder 순으로 내려온다 */
+export interface RoomGrade {
+  gradeId: number;
+  gradeCode: string; // S · A · B · C
+  gradeName: string;
+  basePrice: number; // 비수기 · 시티/마운틴뷰 1박 요금 (리버뷰는 × 1.1)
+  baseGuest: number;
+  maxGuest: number;
+  areaM2: number;
+  bedType: string | null;
+  intro: string | null;
+  sortOrder: number;
 }
 
 /** 객실 관리 목록 요약 (GET /api/admin/rooms/summary). 휴무 = 예약 일자 관리(closed_date) 기준, 오늘 = 한국 시간 */
