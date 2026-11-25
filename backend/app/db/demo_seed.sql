@@ -11,6 +11,7 @@
 --   price       = 비수기 1박 요금 (등급 기준가 × 전망 배율, 리버뷰 1.1). 성수기 1.3배는 테이블 변경이 필요해 Step 3
 --   description = 층 · 전망 · 침대 · 면적 · 조식/라운지 · 휠체어 · 커넥팅 + 등급 설명
 --   view_count  = 추천 점수 시연용 예시 값 (등급 · 리버뷰가 높게)
+--   created_at  = 넣는 날 기준 60일 전. 1302호 · 1204호 · 0904호만 2 · 5 · 9일 전 (추천 카드 NEW = 등록 14일 이내)
 --   사진        = frontend/public/room-photos (AI 생성). 첫 장이 대표 사진, 같은 등급끼리 순서를 돌려 씀
 
 INSERT INTO menu (parent_id, menu_name, menu_url, role, sort_order) VALUES
@@ -61,6 +62,12 @@ INSERT INTO room (room_name, room_type, max_guest, price, description, view_coun
   ('0502호', '디럭스', 2, 605000, '5층 · 리버뷰 · 트윈 · 40㎡. 리버·시티·마운틴 전망의 40㎡ 기본 객실. 퀸 또는 트윈', 79, 'Y'),
   ('0503호', '디럭스', 2, 550000, '5층 · 시티뷰 · 퀸 · 40㎡. 리버·시티·마운틴 전망의 40㎡ 기본 객실. 퀸 또는 트윈', 41, 'Y'),
   ('0504호', '디럭스', 2, 550000, '5층 · 마운틴뷰 · 트윈 · 40㎡. 리버·시티·마운틴 전망의 40㎡ 기본 객실. 퀸 또는 트윈', 48, 'Y');
+
+-- 등록일: 넣는 날 기준이라 언제 넣어도 NEW 는 3개만 보인다 (넣고 4일 안에 시연하면 셋 다 유지)
+UPDATE room SET created_at = now() - interval '60 days';
+UPDATE room SET created_at = now() - interval '2 days' WHERE room_name = '1302호';  -- 이그제큐티브 스위트
+UPDATE room SET created_at = now() - interval '5 days' WHERE room_name = '1204호';  -- 프리미어
+UPDATE room SET created_at = now() - interval '9 days' WHERE room_name = '0904호';  -- 디럭스
 
 -- 객실 사진: room_id 는 위 INSERT 순서(1601호 = 1 … 0504호 = 40). 방마다 첫 줄이 대표 사진
 INSERT INTO attach_file (target_type, target_id, original_name, saved_path, file_size) VALUES

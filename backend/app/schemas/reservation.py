@@ -33,3 +33,31 @@ class ReservationOut(CamelModel):
     request_memo: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class CalendarDay(CamelModel):
+    """예약 달력 하루 (RSV-001). reason: PAST · CLOSED · BOOKED, 예약 가능하면 None"""
+
+    day: date
+    available: bool
+    reason: str | None = None
+
+
+class QuoteOut(CamelModel):
+    """GET /api/rooms/{id}/quote 응답 (Step 2 4C). 예약 저장 때와 같은 계산: total_price = price_per_night * nights"""
+
+    room_id: int
+    check_in: date
+    check_out: date
+    guests: int
+    nights: int
+    price_per_night: int
+    total_price: int
+
+
+class AvailableDatesOut(CamelModel):
+    """GET /api/rooms/{id}/available-dates 응답"""
+
+    month: str
+    today: date
+    days: list[CalendarDay]

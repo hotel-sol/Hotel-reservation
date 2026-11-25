@@ -54,11 +54,18 @@ export interface AttachFile {
 
 export interface RecommendRoom extends Room {
   score: number;
-  recentReservations: number; // 최근 30일 예약 수(대기 + 승인)
-  // 전체 예약 수(인기순 기준). feature/rooms-recommend 백엔드부터 내려와서, 그 전 서버에서는 없을 수 있다
+  recentReservations: number; // 최근 30일 승인 예약 수
+  // 전체 승인 예약 수(인기순 기준). feature/rooms-recommend 백엔드부터 내려와서, 그 전 서버에서는 없을 수 있다
   totalReservations?: number;
-  isRecommended: boolean;
+  isRecommended: boolean; // 추천 점수 1~3위 (= badge "BEST")
+  // 뱃지 하나: BEST(점수 1~3위) > HOT(7일 승인 예약 1~3위) > NEW(등록 14일 이내). 예전 서버에서는 없을 수 있다
+  badge?: "BEST" | "HOT" | "NEW" | null;
   thumbnailUrl: string | null; // 대표 사진 경로 (예: "uploads/rooms/a.jpg"), 없으면 null
+}
+
+// GET /api/rooms/{id} — 객실 상세(1B). 추천 카드 정보 + 사진 전부(올린 순서)
+export interface RoomDetail extends RecommendRoom {
+  photos: string[];
 }
 
 export interface Reservation {
@@ -83,6 +90,31 @@ export interface ClosedDate {
   roomName: string | null;
   closedDate: string;
   reason: string | null;
+}
+
+/** 예약 달력 하루 (RSV-001). reason: 지난 날 · 휴무 · 예약됨, 예약 가능하면 null */
+export interface CalendarDay {
+  day: string; // YYYY-MM-DD
+  available: boolean;
+  reason: "PAST" | "CLOSED" | "BOOKED" | null;
+}
+
+/** GET /api/rooms/{id}/available-dates?month=YYYY-MM */
+export interface AvailableDates {
+  month: string;
+  today: string; // 한국 시간 기준 오늘
+  days: CalendarDay[];
+}
+
+/** GET /api/rooms/{id}/quote 요금 견적. 예약 저장과 같은 계산: totalPrice = pricePerNight * nights */
+export interface Quote {
+  roomId: number;
+  checkIn: string;
+  checkOut: string;
+  guests: number;
+  nights: number;
+  pricePerNight: number;
+  totalPrice: number;
 }
 
 /** 날짜별 예약 수(대기 + 승인). 0건인 날은 빠진다. 예: {"2026-12-15": 1} */
