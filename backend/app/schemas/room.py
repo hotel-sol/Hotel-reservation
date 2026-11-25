@@ -1,12 +1,16 @@
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
 from app.schemas.common import CamelModel
 
 RoomSort = Literal["recommend", "popular", "price"]
 RoomBadge = Literal["BEST", "HOT", "NEW"]
 ViewType = Literal["RIVER", "CITY", "MOUNTAIN"]  # 리버뷰 · 시티뷰 · 마운틴뷰
+
+# #76-1·2: 앞뒤 공백을 먼저 지우고 길이를 잰다 → "   " 는 422, "0775호 " 는 "0775호" 로 저장(중복 검사도 그 이름으로)
+RoomName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+RoomType = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
 
 
 class RoomGradeOut(CamelModel):
@@ -54,8 +58,8 @@ class RoomDetailOut(RecommendRoomOut):
 
 
 class RoomCreate(CamelModel):
-    room_name: str = Field(min_length=1, max_length=100)
-    room_type: str = Field(min_length=1, max_length=50)
+    room_name: RoomName
+    room_type: RoomType
     # 상한 (#69): 요금이 너무 크면 30박 총액이 reservation.total_price(INT) 한도를 넘어 예약 저장이 500,
     # 2^31 이상이면 객실 저장 자체가 500. 가장 비싼 로얄 스위트 성수기 리버뷰도 5,720,000원 · 최대 6명
     max_guest: int = Field(ge=1, le=20)
@@ -64,7 +68,7 @@ class RoomCreate(CamelModel):
     # 2-A1: 등급을 주면 서버가 room_type 을 등급 이름으로 맞춘다. 안 주면 예전처럼 room_type 글자 그대로
     grade_id: int | None = None
     view_type: ViewType | None = None
-    bed_type: str | None = Field(default=None, max_length=30)
+    bed_type: Annotated[str, StringConstraints(strip_whitespace=True, max_length=30)] | None = None
 
 
 class RoomUpdate(RoomCreate):

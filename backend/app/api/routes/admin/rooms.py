@@ -1,6 +1,7 @@
 """관리자) 객실 관리 — ADM-001"""
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import DB, require_admin
 from app.core.dates import today_kst
@@ -19,6 +20,17 @@ def ensure_unique_name(db, name: str, exclude_id: int | None = None):
         q = q.where(Room.room_id != exclude_id)
     if db.scalar(q):
         fail(409, "DUPLICATE_ROOM_NAME", "이미 있는 객실 이름입니다.")
+
+
+def commit_room(db, name: str, exclude_id: int | None = None) -> None:
+    """#76-4: 같은 이름을 거의 동시에 두 번 저장하면 둘 다 중복 확인을 통과하고, 늦은 쪽은 DB UNIQUE 에 걸린다.
+    그 오류를 500 대신 409 DUPLICATE_ROOM_NAME 으로 돌려준다 (다른 이유의 DB 오류는 그대로)."""
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        ensure_unique_name(db, name, exclude_id)
+        raise
 
 
 def room_values(db, body: RoomCreate) -> dict:
@@ -95,7 +107,7 @@ def create_room(body: RoomCreate, db: DB):
     ensure_unique_name(db, body.room_name)
     room = Room(**room_values(db, body))
     db.add(room)
-    db.commit()
+    commit_room(db, body.room_name)
     db.refresh(room)
     return room
 
@@ -121,13 +133,21 @@ def update_room(room_id: int, body: RoomUpdate, db: DB):
         )
     for k, v in values.items():
         setattr(room, k, v)
-    db.commit()
+    commit_room(db, body.room_name, exclude_id=room_id)
     return room
 
 
 @router.patch("/{room_id}/status", response_model=RoomOut)
 def change_status(room_id: int, body: RoomStatusUpdate, db: DB):
-    room = db.get(Room, room_id) or fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
+    # 객실 행을 잠그고 확인 → 확인과 저장 사이에 그 방 예약이 새로 들어오지 못한다 (예약도 객실 행을 잠금, #79)
+    room = db.get(Room, room_id, with_for_update=True) or fail(404, "ROOM_NOT_FOUND", "객실을 찾을 수 없습니다.")
+    # #76-3 (팀 결정 ⓐ): 앞으로 묵을 예약이 있으면 비활성화도 막는다 — 숨긴 방에 손님 예약만 살아 있지 않게
+    if body.is_active == "N" and room.is_active == "Y" and (n := future_reservation_count(db, room_id)):
+        fail(
+            409,
+            "FUTURE_RESERVATION_EXISTS",
+            f"앞으로 묵을 예약이 {n}건 있어 비활성화할 수 없습니다. 예약 관리에서 예약을 먼저 취소해 주세요.",
+        )
     room.is_active = body.is_active  # 삭제 없음: 비활성화만
     db.commit()
     return room

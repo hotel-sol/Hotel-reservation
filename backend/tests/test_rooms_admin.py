@@ -205,3 +205,74 @@ def test_price_and_guest_upper_limits(client, change):
 def test_limits_themselves_allowed(client):
     r = client.post("/api/admin/rooms", json=room1(roomName="0781호", price=10_000_000, maxGuest=20), headers=ADMIN)
     assert r.status_code == 201, r.text
+
+
+# ---------- #76 약점 점검 2차 ----------
+
+def status(client, room_id, value):
+    return client.patch(f"/api/admin/rooms/{room_id}/status", json={"isActive": value}, headers=ADMIN)
+
+
+@pytest.mark.parametrize("change", [{"roomName": "   "}, {"roomType": "  "}])
+def test_blank_name_or_type_rejected(client, change):
+    """#76-1: 공백만 있는 이름 · 종류는 입력 오류."""
+    r = client.post("/api/admin/rooms", json=room1(**{"roomName": "0782호", **change}), headers=ADMIN)
+    assert r.status_code == 422
+
+
+def test_name_spaces_trimmed_and_duplicate_caught(client):
+    """#76-2: 앞뒤 공백은 지우고 저장 → 공백을 붙여도 중복 검사를 피하지 못한다."""
+    r = client.post("/api/admin/rooms", json=room1(roomName=" 0783호 ", roomType=" 디럭스 ", bedType=" 킹 "), headers=ADMIN)
+    assert r.status_code == 201, r.text
+    assert (r.json()["roomName"], r.json()["roomType"], r.json()["bedType"]) == ("0783호", "디럭스", "킹")
+    for name in ["0783호 ", "101호 "]:
+        dup = client.post("/api/admin/rooms", json=room1(roomName=name), headers=ADMIN)
+        assert dup.status_code == 409, name
+        assert dup.json()["detail"]["code"] == "DUPLICATE_ROOM_NAME"
+    assert put(client, room1(roomName="0783호 "), room_id=2).status_code == 409  # 수정도 같음
+
+
+@pytest.mark.parametrize("st", ["APPROVED", "PENDING"])
+def test_future_reservation_blocks_deactivate(client, st):
+    """#76-3 (팀 결정 ⓐ): 앞으로 묵을 예약이 있으면 비활성화 409 — 수정과 같은 규칙."""
+    reserve(1, TODAY + timedelta(days=3), status=st)
+    r = status(client, 1, "N")
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "FUTURE_RESERVATION_EXISTS"
+    assert "1건" in r.json()["detail"]["message"] and "취소" in r.json()["detail"]["message"]
+    assert client.get("/api/admin/rooms", params={"keyword": "101호"}, headers=ADMIN).json()["items"][0]["isActive"] == "Y"
+
+
+def test_past_or_canceled_reservation_allows_deactivate(client):
+    reserve(1, TODAY - timedelta(days=5), nights=2)
+    reserve(1, TODAY + timedelta(days=3), status="CANCELED")
+    r = status(client, 1, "N")
+    assert r.status_code == 200, r.text
+    assert r.json()["isActive"] == "N"
+
+
+def test_activate_not_blocked_by_reservation(client):
+    """다시 켜기(N → Y)는 예약과 상관없이 된다."""
+    run("UPDATE room SET is_active = 'N' WHERE room_id = 1")
+    reserve(1, TODAY + timedelta(days=3))
+    assert status(client, 1, "Y").status_code == 200
+
+
+def test_same_name_saved_twice_at_once_is_409(client, monkeypatch):
+    """#76-4: 두 요청이 동시에 중복 확인을 통과한 상황 → 늦은 쪽은 DB UNIQUE 에 걸리는데 500 이 아니라 409."""
+    from app.api.routes.admin import rooms
+
+    real = rooms.ensure_unique_name
+    calls = []
+
+    def first_check_misses(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return None  # 첫 확인 때는 아직 상대 요청이 저장 전이었다고 흉내
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(rooms, "ensure_unique_name", first_check_misses)
+    r = client.post("/api/admin/rooms", json=room1(), headers=ADMIN)  # 101호 = 이미 있음
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "DUPLICATE_ROOM_NAME"
+    assert len(calls) == 2  # 저장 실패 뒤 다시 확인해서 409
