@@ -139,3 +139,62 @@ def test_failed_cancel_leaves_no_record(client):
             text("SELECT canceled_at, canceled_by FROM reservation WHERE reservation_id = :id"), {"id": past}
         ).one()
     assert tuple(row) == (None, None)
+
+
+def test_concurrent_cancel_and_approve_do_not_overwrite(client):
+    """관리자 A 가 취소하는 중(아직 commit 전)에 관리자 B 가 승인을 누른 경우.
+
+    예약 행을 잠그지 않으면 B 는 옛 상태(PENDING)를 읽고 승인에 성공해 A 의 취소를 덮어쓴다
+    → "취소 정보가 있는 승인 예약". 잠그면 B 는 A 가 끝날 때까지 기다렸다가 CANCELED 를 읽고 409 가 된다.
+    """
+    import threading
+    import time
+
+    rid = add_reservation(TODAY + timedelta(days=60))
+    result = {}
+
+    with engine.connect() as admin_a:
+        tx = admin_a.begin()
+        admin_a.execute(text("SELECT 1 FROM reservation WHERE reservation_id = :id FOR UPDATE"), {"id": rid})
+        admin_a.execute(
+            text("UPDATE reservation SET status = 'CANCELED', canceled_at = now(), canceled_by = 1"
+                 " WHERE reservation_id = :id"),
+            {"id": rid},
+        )
+        admin_b = threading.Thread(
+            target=lambda: result.update(r=client.patch(f"{API}/{rid}/approve", headers=ADMIN))
+        )
+        admin_b.start()
+        time.sleep(1)  # B 가 A 의 잠금에 걸려 기다리게 둔다
+        tx.commit()
+        admin_b.join(timeout=30)
+
+    r = result["r"]
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "INVALID_STATUS"
+    with engine.connect() as conn:
+        status, canceled_at = conn.execute(
+            text("SELECT status, canceled_at FROM reservation WHERE reservation_id = :id"), {"id": rid}
+        ).one()
+    assert status == "CANCELED" and canceled_at is not None
+
+
+def test_past_pending_can_only_be_canceled(client):
+    """체크인이 지난 대기 예약: 승인은 막고(묵지 않은 예약을 승인하지 않게) 취소로 정리할 수 있다.
+
+    지난 승인 예약은 이전처럼 취소 불가(실제로 묵은 기록).
+    """
+    past = add_reservation(TODAY - timedelta(days=1))
+    r = client.patch(f"{API}/{past}/approve", headers=ADMIN)
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "PAST_CHECK_IN"
+    assert r.json()["detail"]["message"] == "체크인이 지난 예약은 승인할 수 없습니다. 취소로 정리해 주세요."
+
+    canceled = client.patch(f"{API}/{past}/cancel", headers=ADMIN)
+    assert canceled.status_code == 200, canceled.text
+    assert canceled.json()["status"] == "CANCELED" and canceled.json()["canceledBy"] == 1
+
+
+def test_today_pending_can_still_be_approved(client):
+    today = add_reservation(TODAY, room_id=5)
+    assert client.patch(f"{API}/{today}/approve", headers=ADMIN).status_code == 200
