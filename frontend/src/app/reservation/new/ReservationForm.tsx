@@ -6,8 +6,8 @@ import { useEffect, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { reservationsApi } from "@/lib/api/reservations";
 import { roomsApi } from "@/lib/api/rooms";
-import { won } from "@/lib/format";
-import type { Quote, Room } from "@/types/api";
+import { fileUrl, won } from "@/lib/format";
+import type { Quote, RoomDetail } from "@/types/api";
 import StayCalendar, { addDays, dayLabel, lastCheckout, MAX_NIGHTS, useRoomCalendar } from "./StayCalendar";
 
 export default function ReservationForm() {
@@ -15,7 +15,7 @@ export default function ReservationForm() {
   const params = useSearchParams();
   const roomId = Number(params.get("roomId"));
 
-  const [room, setRoom] = useState<Room | null>(null);
+  const [room, setRoom] = useState<RoomDetail | null>(null);
   const [form, setForm] = useState({
     checkInDate: params.get("checkIn") ?? "",
     checkOutDate: params.get("checkOut") ?? "",
@@ -28,7 +28,8 @@ export default function ReservationForm() {
   const cal = useRoomCalendar(roomId);
 
   useEffect(() => {
-    if (roomId) roomsApi.get(roomId).then(setRoom).catch((e: ApiError) => setError(e.message));
+    // 객실 상세와 같은 주소. 대표 사진(thumbnailUrl)까지 받는다
+    if (roomId) roomsApi.detail(roomId).then(setRoom).catch((e: ApiError) => setError(e.message));
   }, [roomId]);
 
   // 주소로 받은 날짜(객실 추천에서 넘어옴)가 여러 달에 걸치면 그 달들도 불러와서 확인한다.
@@ -125,7 +126,12 @@ export default function ReservationForm() {
       </form>
 
       <aside className="card h-fit space-y-2 text-sm">
-        <div className="flex h-32 items-center justify-center rounded-lg bg-slate-100 text-4xl">🛏️</div>
+        {room?.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={fileUrl(room.thumbnailUrl)} alt={`${room.roomName} 대표 사진`} className="h-32 w-full rounded-lg object-cover" />
+        ) : (
+          <div className="flex h-32 items-center justify-center rounded-lg bg-slate-100 text-4xl">🛏️</div>
+        )}
         <h2 className="text-lg font-semibold">{room?.roomName ?? "…"}</h2>
         <p className="text-slate-500">{room?.description}</p>
         <p>1박 {room ? won(room.price) : "-"} · 최대 {room?.maxGuest}명</p>
