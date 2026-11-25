@@ -21,7 +21,8 @@ function check(f: typeof EMPTY): Partial<Record<Key, string>> {
   if (!f.name.trim()) e.name = "이름을 적어 주세요.";
   else if (f.name.trim().length > 50) e.name = "50자까지 쓸 수 있어요.";
   if (f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim())) e.email = "이메일 형식이 아니에요. 예: guest@example.com";
-  if (f.phone && !/^[0-9-]{9,20}$/.test(f.phone.trim())) e.phone = "전화번호를 끝까지 적어 주세요. 예: 010-1234-5678";
+  if (!f.phone.trim()) e.phone = "전화번호를 적어 주세요.";
+  else if (!/^[0-9-]{9,20}$/.test(f.phone.trim())) e.phone = "전화번호를 끝까지 적어 주세요. 예: 010-1234-5678";
   return e;
 }
 
@@ -70,7 +71,7 @@ export default function SignupForm() {
         loginId,
         password: form.password,
         name: form.name.trim(),
-        phone: form.phone.trim() || undefined,
+        phone: form.phone.trim(),
         email: form.email.trim() || undefined,
       });
       // cacheComponents 는 이전 화면 상태를 유지하므로 비밀번호가 남지 않게 비운다
@@ -117,7 +118,7 @@ export default function SignupForm() {
         <input {...fieldProps("su-email", shown("email"))} {...bind("email")} type="email" autoComplete="email" maxLength={100} />
       </Field>
 
-      <Field id="su-phone" label="전화번호" optional hint="숫자만 쓰면 - 는 자동으로 들어가요. 예: 010-1234-5678" error={shown("phone")}>
+      <Field id="su-phone" label="전화번호" hint="숫자만 쓰면 - 는 자동으로 들어가요. 예: 010-1234-5678" error={shown("phone")}>
         <input {...fieldProps("su-phone", shown("phone"))} {...bind("phone")} type="tel" inputMode="numeric" autoComplete="tel" maxLength={13} />
       </Field>
 

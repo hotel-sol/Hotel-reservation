@@ -96,14 +96,16 @@ def set_session(response: Response, member: Member) -> None:
     )
 
 
-def clean_profile(name: str, phone: str | None, email: str | None) -> tuple[str, str | None, str | None]:
+def clean_profile(name: str, phone: str | None, email: str | None) -> tuple[str, str, str | None]:
     """가입 · 정보 수정 공통 검사. 앞뒤 공백을 지우고 빈 값은 NULL로."""
     name = name.strip()
     phone = (phone or "").strip() or None
     email = (email or "").strip() or None
     if not name:
         fail(400, "INVALID_INPUT", "이름을 입력해 주세요.")
-    if phone and not PHONE_RE.match(phone):
+    if not phone:
+        fail(400, "INVALID_PHONE", "전화번호를 입력해 주세요.")
+    if not PHONE_RE.match(phone):
         fail(400, "INVALID_PHONE", "전화번호는 숫자와 - 만 씁니다.")
     if email and not EMAIL_RE.match(email):
         fail(400, "INVALID_EMAIL", "이메일 형식이 아닙니다.")

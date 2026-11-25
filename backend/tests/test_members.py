@@ -16,7 +16,7 @@ COOKIE = get_settings().session_cookie
 
 
 def signup(client, login_id="guest01", password="password123", **extra):
-    return client.post("/api/members/signup", json={"loginId": login_id, "password": password, "name": "손님", **extra})
+    return client.post("/api/members/signup", json={"loginId": login_id, "password": password, "name": "손님", "phone": "010-1234-0000", **extra})
 
 
 def login(client, login_id="guest01", password="password123"):
@@ -71,7 +71,7 @@ def test_signup_rules(client):
     assert signup(client, "a" * 20, password="x" * 64).status_code == 201
     assert signup(client, "bad_mail", email="not-mail").json()["detail"]["code"] == "INVALID_EMAIL"
     r = client.post("/api/members/signup",
-                    json={"loginId": "sneaky", "password": "password123", "name": "x", "role": "ADMIN"})
+                    json={"loginId": "sneaky", "password": "password123", "name": "x", "phone": "010-1234-0001", "role": "ADMIN"})
     assert r.json()["role"] == "USER"  # 가입으로 관리자가 될 수 없다
 
 
@@ -193,9 +193,23 @@ def test_update_profile(client):
     r = client.put("/api/members/me", json={"name": "새이름", "phone": "010-1111-2222", "email": "new@example.com"})
     assert r.status_code == 200 and r.json()["name"] == "새이름"
     assert client.get("/api/members/me").json()["email"] == "new@example.com"
-    r = client.put("/api/members/me", json={"name": "새이름", "email": "b@example.com"})
+    r = client.put("/api/members/me", json={"name": "새이름", "phone": "010-1111-2222", "email": "b@example.com"})
     assert r.json()["detail"]["code"] == "DUPLICATE_EMAIL"
-    assert client.put("/api/members/me", json={"name": "   "}).status_code == 400
+    assert client.put("/api/members/me", json={"name": "   ", "phone": "010-1111-2222"}).status_code == 400
+    # 전화번호는 필수: 빼거나 비우면 400
+    for phone in (None, "", "   "):
+        r = client.put("/api/members/me", json={"name": "새이름", "phone": phone})
+        assert r.json()["detail"]["code"] == "INVALID_PHONE"
+
+
+def test_signup_requires_phone(client):
+    body = {"loginId": "nophone", "password": "password123", "name": "손님"}
+    r = client.post("/api/members/signup", json=body)  # 빠지면 400
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "INVALID_PHONE"
+    for phone in ("", "   "):  # 빈 값은 형식 검사(422)에서 막힌다
+        assert client.post("/api/members/signup", json={**body, "phone": phone}).status_code == 422
+    assert sql("SELECT count(*) AS n FROM member WHERE login_id = 'nophone'")[0]["n"] == 0
+    assert signup(client, "badphone", phone="12-ab").status_code == 422
 
 
 def test_change_password_logs_out_other_devices(client):

@@ -18,6 +18,7 @@ from app.models import Member
 DEV_ADMIN_ID = "admin01"
 DEV_ADMIN_NAME = "관리자"
 MIN_PASSWORD = 8
+ADMIN_PHONE = "010-0000-0000"  # 목업 번호(전화번호 필수 규칙에 맞춤)
 LOGIN_ID_RE = re.compile(r"^[A-Za-z0-9_]{4,50}$")
 
 
@@ -29,9 +30,10 @@ def create_admin(login_id: str, name: str, password: str) -> str:
         member = db.scalar(select(Member).where(Member.login_id == login_id))
         if member:
             member.role, member.password = "ADMIN", hash_password(password)
+            member.phone = member.phone or ADMIN_PHONE
             result = "promoted"
         else:
-            db.add(Member(login_id=login_id, password=hash_password(password), name=name, role="ADMIN"))
+            db.add(Member(login_id=login_id, password=hash_password(password), name=name, phone=ADMIN_PHONE, role="ADMIN"))
             result = "created"
         db.commit()
     return result
