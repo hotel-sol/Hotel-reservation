@@ -1,6 +1,6 @@
 # TECH_SPEC — 태양의 호텔 기술 명세
 
-- 기준: dev `ee4a061`, 2026-11-25 (Step 3 · 점검 반영, PR #94까지). 직전 판: [docs/archive/2026-11-25_step3/DevelopDoc/TECH_SPEC.md](../docs/archive/2026-11-25_step3/DevelopDoc/TECH_SPEC.md) · 그 전 판: [docs/archive/2026-11-25_step2/DevelopDoc/TECH_SPEC.md](../docs/archive/2026-11-25_step2/DevelopDoc/TECH_SPEC.md)
+- 기준: main `dfaacd5`, 2026-11-26 (배포된 버전, #107~#111 반영). 직전 판: [docs/archive/2026-11-25_step3/DevelopDoc/TECH_SPEC.md](../docs/archive/2026-11-25_step3/DevelopDoc/TECH_SPEC.md) · 그 전 판: [docs/archive/2026-11-25_step2/DevelopDoc/TECH_SPEC.md](../docs/archive/2026-11-25_step2/DevelopDoc/TECH_SPEC.md)
 - 구조 그림(전체 구조 · ERD · 예약 흐름 · 상태 · 휴무 지정 · 로그인): [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md)
 - API 입력 · 출력 전체: 백엔드를 켜고 http://localhost:8000/docs
 
@@ -74,7 +74,8 @@ Hotel-reservation/
 | 항목 | 방식 |
 |---|---|
 | 비밀번호 저장 | scrypt 해시 |
-| 가입 입력 | 아이디 영문 · 숫자 · `_` 4~20자, 비밀번호 8~64자 |
+| 가입 입력 | 아이디 영문 · 숫자 · `_` 4~20자, 비밀번호 8~64자, 전화번호 필수(숫자와 `-` 9~20자, 정보 수정도 같음, DB `member.phone` NOT NULL. 탈퇴하면 빈 문자열) |
+| 로그인 후 이동 | 손님 · 관리자 모두 `/rooms`(고객 화면). 관리자는 머리말 [관리자 페이지] 버튼으로 이동. 로그인 전에 보던 내부 주소(`next`)가 있으면 그곳으로 |
 | 로그인 유지 | 서명한 세션 쿠키(회원 번호 + 비밀번호 표식, 8시간), HttpOnly · SameSite=Lax, 로컬이 아니면 Secure(HTTPS 필요). `APP_ENV`가 `local`이 아니면 `SESSION_SECRET`이 `change-me` · 32자 미만일 때 서버가 시작하지 않음(#70, local은 경고만) |
 | 비밀번호 변경 | 다른 기기 로그인은 끊기고 지금 기기는 유지(쿠키의 비밀번호 표식이 달라짐) |
 | 잘못된 비밀번호 | 10분 안에 5번 틀리면 10분 잠금(429). 기록은 `login_attempt` 테이블. 로그인에 성공한 적 있는 기기(서명한 `hotel_device` 쿠키)는 따로 세서 남이 일부러 잠가도 주인은 들어올 수 있음 |
@@ -111,6 +112,7 @@ Hotel-reservation/
 | `DATE_CLOSED` | 409 | 예약 기간에 호텔 전체 휴무일이 있음 (여러 이유가 겹치면 이 코드가 먼저) |
 | `ROOM_CLOSED` | 409 | 예약 기간에 그 객실만 판매 중지된 날이 있음 |
 | `ROOM_NOT_AVAILABLE` | 409 | 예약 기간에 다른 예약(대기 · 승인)이 있음. DB 이중 예약 제약 위반(23P01)도 이 코드 |
+| `INVALID_PHONE` | 400 | 가입 · 정보 수정에서 전화번호가 비었거나 숫자 · `-` 9~20자가 아님 |
 | `TOO_MANY_PENDING` | 409 | 그 회원의 승인 대기 예약(체크아웃 전)이 이미 3건 |
 | `PAST_DATE` · `INVALID_DATES` | 400 | 지난 체크인 날짜 · 체크아웃이 체크인보다 빠르거나 같음 |
 | `TOO_LONG_STAY` · `TOO_FAR_DATE` | 400 | 6박 초과 · 체크인이 오늘부터 30일 뒤 (예약 · 견적 · 추천 검색 공통) |
@@ -144,4 +146,6 @@ PR 전에 위 세 가지를 돌립니다. 테스트에서 DB 행은 `tests/helpe
 - 브랜치: `main`(제출 · 시연) · `dev`(통합, 기본 브랜치) · `feature/<파트>-<내용>`. 기능 PR은 dev로, main은 dev에서 온 PR만. 자세한 규칙은 [README](../README.md)의 브랜치 규칙.
 - 팀 규칙 R1~R8은 GitHub Discussion #60 (DB 파일은 DB 담당이 고침, 테스트 데이터는 `tests/helpers.py`로만 등).
 - 보호 규칙(ruleset)은 11-23에 해제했고 지금은 약속으로 지킵니다.
-- 시연 배포: **미정**. 정할 것 — 배포 담당 · 주소, HTTPS(로그인 쿠키가 Secure), `BACKEND_URL` · `APP_ENV=production` · 32자 이상 무작위 `SESSION_SECRET`(`python -c "import secrets; print(secrets.token_hex(32))"`). 실제 화면 테스트 목록: [RELEASE_TEST](RELEASE_TEST.md). 관리 화면에서 올린 사진은 `SUPABASE_URL` · `SUPABASE_SECRET_KEY`를 넣으면 Storage 버킷 `room-photos`(`<DB_SCHEMA>/rooms/` 아래)에, 없으면 백엔드 PC의 `backend/uploads/`에 저장됩니다.
+- 시연 배포 (11-25): 화면 **Vercel** https://hotel-reservation-ten-phi.vercel.app (root `frontend`, `BACKEND_URL` = 백엔드 주소) · 백엔드 **Render** https://hotel-sol-api.onrender.com (root `backend`, 싱가포르 · 무료, `APP_ENV=production` · `DB_SCHEMA=hotel` · `DATABASE_URL` · 32자 이상 무작위 `SESSION_SECRET`). 둘 다 HTTPS이고 `main`에 push하면 자동으로 다시 배포됩니다. DB는 Supabase 공용 `hotel` 스키마.
+- Render 무료는 15분 동안 요청이 없으면 잠들어 첫 응답이 30초~1분 걸립니다. 시연 전에 `/api/health/db`를 열어 깨웁니다. 실제 화면 테스트 목록: [RELEASE_TEST](RELEASE_TEST.md).
+- 관리 화면에서 올린 사진은 `SUPABASE_URL` · `SUPABASE_SECRET_KEY`를 넣으면 Storage 버킷 `room-photos`(`<DB_SCHEMA>/rooms/` 아래)에, 없으면 백엔드 서버의 `backend/uploads/`에 저장됩니다. Render 무료 서버의 디스크는 다시 시작하면 지워지므로, 배포 서버에 두 값이 없으면 시연 중 올린 사진은 남지 않습니다. 시연용 사진(사진 기록 142개, 파일은 `frontend/public/room-photos/`)은 화면 쪽 파일이라 영향이 없습니다.

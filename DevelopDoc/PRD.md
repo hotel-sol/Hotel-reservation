@@ -1,6 +1,6 @@
 # PRD — 태양의 호텔 (호텔 예약 시스템)
 
-- 기준: dev `ee4a061`, 2026-11-25 (Step 3 · 점검 반영, PR #94까지). 직전 판: [docs/archive/2026-11-25_step3/DevelopDoc/PRD.md](../docs/archive/2026-11-25_step3/DevelopDoc/PRD.md) · 그 전 판: [docs/archive/2026-11-25_step2/DevelopDoc/PRD.md](../docs/archive/2026-11-25_step2/DevelopDoc/PRD.md)
+- 기준: main `dfaacd5`, 2026-11-26 (배포된 버전, #107~#111 반영). 직전 판: [docs/archive/2026-11-25_step3/DevelopDoc/PRD.md](../docs/archive/2026-11-25_step3/DevelopDoc/PRD.md) · 그 전 판: [docs/archive/2026-11-25_step2/DevelopDoc/PRD.md](../docs/archive/2026-11-25_step2/DevelopDoc/PRD.md)
 - 해커톤: 3기 바이브코딩 해커톤(11-19 ~ 11-26), 5인 팀
 - 관련 문서: [TECH_SPEC](TECH_SPEC.md) · [WORK_UNITS](WORK_UNITS.md) · [FINAL_CHECKLIST](FINAL_CHECKLIST.md) · [시스템 구조 그림](../docs/ARCHITECTURE.md)
 
@@ -27,8 +27,8 @@
 
 | 역할 | 할 수 있는 것 |
 |---|---|
-| 손님(`USER`) | 회원가입 · 로그인, 객실 추천, 예약 신청(승인 대기 최대 3건), 내 예약 보기, 내 정보 수정 · 비밀번호 변경 · 탈퇴. **예약 취소는 손님이 직접 하지 못함**(팀 결정, 관리자만) |
-| 관리자(`ADMIN`) | 객실 관리, 예약 일자(휴무일) 관리, 예약 관리(승인 · 취소) |
+| 손님(`USER`) | 회원가입(전화번호 필수) · 로그인, 객실 추천, 예약 신청(승인 대기 최대 3건), 내 예약 보기, 내 정보 수정 · 비밀번호 변경 · 탈퇴. **예약 취소는 손님이 직접 하지 못함**(팀 결정, 관리자만) |
+| 관리자(`ADMIN`) | 객실 관리, 예약 일자(휴무일) 관리, 예약 관리(승인 · 취소). 로그인하면 고객 화면(`/rooms`)부터 보이고, 머리말의 [관리자 페이지] 버튼으로 이동 |
 | 로그인 안 한 사람 | 객실 추천 보기, 회원가입 · 로그인. 비밀번호 찾기는 시연 전까지 꺼 둠(안내 화면만, API는 403) |
 
 ## 5. 화면과 기능 (5개 파트)
