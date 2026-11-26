@@ -2,7 +2,19 @@
 
 손님은 날짜와 인원만 넣으면 **예약 가능한 객실을 추천받아 바로 예약**하고, 관리자는 **객실 · 휴무일 · 예약 승인**을 관리하는 호텔 예약 서비스입니다. 3기 바이브코딩 해커톤(11-19 ~ 11-26), 5인 팀.
 
-- 기준: dev `ee4a061`, 2026-11-25 (Step 3 · 점검 반영, PR #94까지). 직전 판: [docs/archive/2026-11-25_step3/ROOT_README.md](docs/archive/2026-11-25_step3/ROOT_README.md) · 그 전 판: [docs/archive/2026-11-25_step2/ROOT_README.md](docs/archive/2026-11-25_step2/ROOT_README.md)
+## 시연 주소
+
+| 무엇 | 주소 |
+|---|---|
+| 화면 (Vercel) | https://hotel-reservation-ten-phi.vercel.app |
+| 백엔드 API (Render) | https://hotel-sol-api.onrender.com (상태 확인 `/api/health/db`) |
+
+- `main`에 push하면 둘 다 자동으로 다시 배포됩니다. DB는 Supabase 공용 `hotel` 스키마(객실 40개, 사진은 AI 생성).
+- Render 무료 플랜은 15분 동안 요청이 없으면 잠들어 첫 응답이 30초~1분 걸립니다. 시연 전에 위 상태 확인 주소를 한 번 열어 깨워 두세요.
+- 손님 기능은 가입 후 바로 쓸 수 있습니다. 관리자 계정은 팀에 문의(비밀번호는 저장소에 두지 않음).
+- 발표 자료: [docs/presentation/0_team_발표자료_최종.pdf](docs/presentation/0_team_발표자료_최종.pdf)
+
+- 기준: main `070a8b5`, 2026-11-26 (배포 · #107~#114 반영, 테스트 200개). 직전 판: [docs/archive/2026-11-25_step3/ROOT_README.md](docs/archive/2026-11-25_step3/ROOT_README.md) · 그 전 판: [docs/archive/2026-11-25_step2/ROOT_README.md](docs/archive/2026-11-25_step2/ROOT_README.md)
 
 ## 무엇을 할 수 있나
 
