@@ -36,6 +36,7 @@
 | 위치 | 내용 |
 |---|---|
 | [`DevelopDoc/`](DevelopDoc/) | **개발 문서**: [PRD](DevelopDoc/PRD.md) · [TECH_SPEC](DevelopDoc/TECH_SPEC.md) · [WORK_UNITS](DevelopDoc/WORK_UNITS.md) · [FINAL_CHECKLIST](DevelopDoc/FINAL_CHECKLIST.md) |
+| [`docs/report/PROJECT_REPORT.md`](docs/report/PROJECT_REPORT.md) | **프로젝트 통합 보고서**: 만든 것 · 화면별 결과 · 개발 과정 · 품질 · 회고를 한 문서로 |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 전체 구조 · ERD · 예약 흐름 · 상태 · 휴무 지정 · 로그인 · 화면별 API 현황 (그림) |
 | [`docs/hotel_reservation_ddl.sql`](docs/hotel_reservation_ddl.sql) | 테이블 정의 (기준, 10개) |
 | [`docs/archive/`](docs/archive/) | 과거 자료: 11-19~11-23 설계서 · ERD · 화면 설계 그림, [Step 3 반영 직후 문서](docs/archive/2026-11-25_step3/README.md) · [Step 3 반영 전 문서](docs/archive/2026-11-25_step2/) |
