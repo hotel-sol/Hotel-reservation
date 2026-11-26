@@ -1,6 +1,6 @@
 # WORK_UNITS — 작업 단위 명세
 
-- 기준: dev `ee4a061`, 2026-11-25 (Step 3 · 점검 반영, PR #94까지). 직전 판: [docs/archive/2026-11-25_step3/DevelopDoc/WORK_UNITS.md](../docs/archive/2026-11-25_step3/DevelopDoc/WORK_UNITS.md). 체크는 **dev에 merge된 코드**로 확인한 것만 했습니다. 이전 판: [docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md](../docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md)
+- 기준: main `dfaacd5`, 2026-11-26 (배포된 버전, #107~#111 반영). 직전 판: [docs/archive/2026-11-25_step3/DevelopDoc/WORK_UNITS.md](../docs/archive/2026-11-25_step3/DevelopDoc/WORK_UNITS.md). 체크는 **dev에 merge된 코드**로 확인한 것만 했습니다. 이전 판: [docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md](../docs/archive/2026-11-25_step2/DevelopDoc/WORK_UNITS.md)
 - 파트 번호는 [PRD 5절](PRD.md#5-화면과-기능-5개-파트)과 같습니다. 진행은 노션 팀 페이지 "Step 2 · Step 3 계획"에서도 갱신합니다.
 - 모든 작업 공통 완료 조건: `uv run pytest` 통과, `npm run build` 통과, dev로 PR.
 
@@ -88,7 +88,7 @@
 - [x] 1-A3 로그인 잠금을 `login_attempt` 테이블에 저장(10분 · 5번), 로그인에 성공한 기기는 따로 셈
 - [x] 보안 #67: 비밀번호 찾기 시연 전까지 끔(403), 탈퇴 아이디 `withdrawn-<번호>`
 - [x] 가입 · 로그인 · 마이페이지 · 비밀번호 찾기 화면 디자인
-- [x] #77 추천 검색 · 객실 상세도 예약과 같은 기간 제한(최대 30박 · 1년 안) (PR #91)
+- [x] #77 추천 검색 · 객실 상세도 예약과 같은 기간 제한(최대 30박 · 1년 안) (PR #91) → 11-25 밤 6박 · 30일로 바뀜(PR #110)
 
 **2 객실 관리** (PR #73 · #81 · #85)
 - [x] 2-A1 등급 테이블 연결(`room.grade_id` · `view_type` · `bed_type`, `GET room-grades`)
@@ -102,7 +102,7 @@
 - [x] 보안 점검 #66: 휴무 지정 때 객실 행 잠금(예약 저장과 동시 처리), 기간 해제도 최대 31일, 달력 연도 2000~2100
 
 **4 객실 예약** (PR #62 · #74 · #79)
-- [x] 예약 상한: 최대 30박 · 체크인 365일 안 (PR #62)
+- [x] 예약 상한: 최대 30박 · 체크인 365일 안 (PR #62) → 11-25 밤 최대 6박 · 체크인 30일 안으로 줄임(PR #110)
 - [x] 1박 요금 기록 `pricePerNight`, 요금 계산을 `reservation_service` 한 곳으로, 이중 예약 제약 위반(23P01) → 409 `ROOM_NOT_AVAILABLE` (PR #74)
 - [x] #68 회원 한 명의 승인 대기 예약 최대 3건 `TOO_MANY_PENDING` (PR #79)
 
@@ -112,6 +112,15 @@
 - [x] #76 공통: DB 숫자 범위를 넘는 번호는 500 대신 404 (PR #82)
 - [x] 4번 점검 반영: 승인 · 취소 동시 요청은 예약 행 잠금으로 늦은 쪽 409 (PR #84), 체크인이 지난 대기 예약은 승인 불가 · 취소로만 정리 (PR #88)
 - [x] 보안 #70: `health/db`에서 DB 버전 숨김, 약한 `SESSION_SECRET`은 배포 환경에서 서버 시작 거부 (PR #94)
+
+### 11-25 밤 — 배포 전후 마무리 (main `adc05fe` → `070a8b5`)
+
+- [x] 관리자도 로그인 후 고객 화면(`/rooms`)부터, [관리자 페이지] 버튼으로 이동 (PR #107)
+- [x] 회원가입 · 정보 수정에서 전화번호 필수, 목업 계정에 전화번호 (PR #108)
+- [x] 예약 가능 범위 365일 → 30일, 최대 30박 → 6박 (예약 · 견적 · 추천 검색 · 달력 공통) (PR #110)
+- [x] `member.phone` NOT NULL(탈퇴하면 빈 문자열), 공용 `hotel`에도 적용 (PR #111)
+- [x] 배포: Vercel(화면) + Render(백엔드), `main` push 때 자동 배포 확인, 배포 메모는 `backend/README.md` (PR #113 · #114)
+- [x] 최종 백엔드 테스트 200개 통과 (11-26, main `070a8b5`)
 
 ### 3-B 후보 (해커톤 뒤)
 
