@@ -197,7 +197,7 @@
 
 | 자료 | 위치 |
 |---|---|
-| 팀 발표 자료(14쪽) | [docs/presentation/0_team_발표자료_최종.pdf](../presentation/0_team_발표자료_최종.pdf) |
+| 팀 발표 자료(13쪽) | [docs/presentation/0_team_발표자료_최종.pdf](../presentation/0_team_발표자료_최종.pdf) |
 | 파트별 발표 · 회고 | [docs/presentation/](../presentation/) — 1번(대본 포함) · 2번(`5_part2_*`) · 3번 · 4번 · 5번(통합 회고 `Part_5_*`) |
 | 개발 문서 | [PRD](../../DevelopDoc/PRD.md) · [TECH_SPEC](../../DevelopDoc/TECH_SPEC.md) · [WORK_UNITS](../../DevelopDoc/WORK_UNITS.md) · [FINAL_CHECKLIST](../../DevelopDoc/FINAL_CHECKLIST.md) · [RELEASE_TEST](../../DevelopDoc/RELEASE_TEST.md) |
 | 구조 그림 | [docs/ARCHITECTURE.md](../ARCHITECTURE.md) |
